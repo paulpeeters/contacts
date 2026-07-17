@@ -1,0 +1,46 @@
+{{define "label_sheet_list"}}
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Etikettenbladen</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+{{template "nav"}}
+<main class="container">
+  <h1>Etikettenbladen</h1>
+  <p><small>Het papierformaat, aantal etiketten, tussenruimte en marges van een fysiek vel etiketten
+  &mdash; meestal &eacute;&eacute;n keer ingesteld per soort vel dat je gebruikt. Bij het afdrukken
+  kies je welk etikettenblad met welke <a href="/label-contents">inhoud</a> gecombineerd wordt.</small></p>
+  <p><a href="/label-sheets/new" role="button">+ Nieuw etikettenblad</a></p>
+  <table>
+    <thead>
+      <tr><th>Naam</th><th>Papier</th><th>Raster</th><th>Etiketgrootte</th><th></th></tr>
+    </thead>
+    <tbody>
+      {{range .}}
+      <tr id="sheet-{{.ID}}">
+        <td><a href="/label-sheets/{{.ID}}/edit">{{.Name}}</a></td>
+        <td>{{.PaperWidthMM}} &times; {{.PaperHeightMM}} mm</td>
+        <td>{{.Cols}} &times; {{.Rows}}</td>
+        <td>{{printf "%.1f" .LabelWidthMM}} &times; {{printf "%.1f" .LabelHeightMM}} mm</td>
+        <td>
+          <button class="secondary outline"
+                  hx-delete="/label-sheets/{{.ID}}"
+                  hx-target="#sheet-{{.ID}}"
+                  hx-swap="outerHTML"
+                  hx-confirm="Etikettenblad '{{.Name}}' verwijderen?">Verwijderen</button>
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="5">Nog geen etikettenbladen. <a href="/label-sheets/new">Maak er een aan</a>.</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+</main>
+</body>
+</html>
+{{end}}

@@ -1,0 +1,218 @@
+{{define "label_filter_form"}}
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{if .Filter.ID}}Filter bewerken/afdrukken{{else}}Etiketten afdrukken{{end}}</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+<style>
+  #contacts-table { display: block; overflow-x: auto; max-height: 60vh; overflow-y: auto; }
+  .tag-filter-list label { display: inline-block; margin-right: 0.75rem; white-space: nowrap; }
+</style>
+</head>
+<body>
+{{template "nav"}}
+<main class="container">
+  <h1>{{if .Filter.ID}}Filter bewerken/afdrukken: {{.Filter.Name}}{{else}}Etiketten afdrukken{{end}}</h1>
+  <p>
+    <a href="/label-filters">&larr; Alle filters</a>
+    &middot; <a href="/label-sheets">Etikettenbladen</a>
+    &middot; <a href="/label-contents">Etiketinhoud</a>
+  </p>
+
+  {{if not .Sheets}}<p><strong>Er zijn nog geen <a href="/label-sheets">etikettenbladen</a>.</strong></p>{{end}}
+  {{if not .Contents}}<p><strong>Er is nog geen <a href="/label-contents">etiketinhoud</a>.</strong></p>{{end}}
+
+  <form method="post" action="/label-prints" target="_blank" id="filter-form">
+    <label>Naam van dit filter (optioneel &mdash; enkel nodig om te bewaren voor later)
+      <input type="text" name="name" value="{{.Filter.Name}}" placeholder="bv. Kerstkaarten vrienden">
+    </label>
+
+    <div class="grid">
+      <label>Etikettenblad
+        <select name="sheet_id" id="sheet_id" onchange="checkFit()">
+          {{$selSheet := .Filter.SheetID}}
+          {{range .Sheets}}
+          <option value="{{.ID}}" {{if eq .ID $selSheet}}selected{{end}}>{{.Name}}</option>
+          {{end}}
+        </select>
+      </label>
+      <label>Inhoud
+        <select name="content_id" id="content_id" onchange="checkFit()">
+          {{$selContent := .Filter.ContentID}}
+          {{range .Contents}}
+          <option value="{{.ID}}" {{if eq .ID $selContent}}selected{{end}}>{{.Name}}</option>
+          {{end}}
+        </select>
+      </label>
+    </div>
+    <p id="fit-warning" style="display:none; color:#9a6700;"></p>
+
+    <fieldset>
+      <legend><strong>Afdrukken per</strong></legend>
+      <label>
+        <input type="radio" name="print_mode" value="contact" {{if ne .Filter.PrintMode "household"}}checked{{end}}>
+        Contact &mdash; één etiket per geselecteerd contact.
+      </label>
+      <label>
+        <input type="radio" name="print_mode" value="household" {{if eq .Filter.PrintMode "household"}}checked{{end}}>
+        Huishouden &mdash; één etiket per huishouden, ook als je meerdere leden ervan aanvinkt.
+        Persoonlijke velden ({FirstName}, {Mobile}, {PersonalEmail}, ...) blijven dan leeg;
+        gebruik huishoudvelden zoals {HouseholdLabel} en {Address}.
+      </label>
+    </fieldset>
+
+    <label>Zoeken (naam, huishouden, stad, tags)
+      <input type="text" id="search-input" name="search_term" value="{{.Filter.SearchTerm}}" placeholder="typ om te filteren..." oninput="filterRows()">
+    </label>
+
+    {{if .Tags}}
+    <p><strong>Filter op tag:</strong></p>
+    <div class="tag-filter-list">
+      {{range .Tags}}
+      <label>
+        <input type="checkbox" name="tags[]" class="tag-filter" value="{{.}}" onchange="filterRows()"> {{.}}
+      </label>
+      {{end}}
+    </div>
+    {{end}}
+
+    <p style="display:flex; flex-wrap:wrap; align-items:center; gap:0.5rem;">
+      <button type="button" class="secondary outline" onclick="selectVisible(true)" style="width:auto;">Alles selecteren (zichtbaar)</button>
+      <button type="button" class="secondary outline" onclick="selectVisible(false)" style="width:auto;">Alles deselecteren (zichtbaar)</button>
+      <button type="button" id="save-filter-btn"
+              {{if .Filter.ID}}hx-put="/label-filters/{{.Filter.ID}}"{{else}}hx-post="/label-filters"{{end}}
+              hx-include="closest form"
+              class="outline" style="width:auto;">Filter bewaren</button>
+      &mdash; <strong><span id="selected-count">0</span></strong> geselecteerd
+    </p>
+
+    <div id="contacts-table">
+      <table>
+        <thead>
+          <tr><th></th><th>Naam</th><th>Huishouden</th><th>Stad</th><th>Tags</th></tr>
+        </thead>
+        <tbody id="contacts-body">
+          {{range .Contacts}}
+          <tr data-search="{{.FirstName}} {{.LastName}} {{.HouseholdLabel}} {{.City}} {{.Tags}}" data-tags="{{.Tags}}">
+            <td><input type="checkbox" name="contact_id[]" value="{{.ID}}" class="contact-check"></td>
+            <td>{{.FirstName}} {{.LastName}}</td>
+            <td>{{.HouseholdLabel}}</td>
+            <td>{{.City}}</td>
+            <td>{{.Tags}}</td>
+          </tr>
+          {{else}}
+          <tr><td colspan="5">Nog geen contacten.</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+
+    <label>Start bij etiket # (1 = linksboven, telt van links naar rechts, rij per rij &mdash; handig als de eerste etiketten van het vel al gebruikt zijn)
+      <input type="number" name="start" min="1" value="1" style="max-width:8rem">
+    </label>
+
+    <p><small>
+      Etiketten en checklist gebruiken dezelfde selectie hierboven en hetzelfde Volgnr
+      (<code>{SeqNo}</code> op de inhoud komt overeen met de Volgnr-kolom op de checklist)
+      &mdash; twee losse knoppen, elk een eigen PDF in een eigen tabblad, want &eacute;&eacute;n
+      klik die twee tabbladen tegelijk probeert te openen wordt door sommige browsers
+      (pop-upblokkering) maar voor de helft toegelaten.
+    </small></p>
+
+    <div style="display:flex; flex-wrap:wrap; gap:0.5rem;">
+      <button type="submit" style="width:auto;">Etiketten genereren (PDF)</button>
+      <button type="submit" formaction="/label-prints/checklist" formtarget="_blank"
+              class="secondary" style="width:auto;">Checklist genereren (PDF, A4 liggend)</button>
+    </div>
+  </form>
+
+  <script>
+    var FILTER_TAGS = "{{.Filter.Tags}}".split(',').map(function (t) { return t.trim(); }).filter(Boolean);
+    var AUTO_SELECT = {{if .Filter.ID}}true{{else}}false{{end}};
+
+    // Label sizes (mm) per sheet and the furthest-right/down element position
+    // per content, both purely client-side, for the loose "does this fit"
+    // heads-up below the sheet/content pickers -- see labelContentFitsSheet
+    // in print.go for the server-side equivalent used elsewhere.
+    var SHEETS = {
+      {{range .Sheets}}'{{.ID}}': { lw: {{.LabelWidthMM}}, lh: {{.LabelHeightMM}} },{{end}}
+    };
+    var CONTENTS = {
+      {{range .Contents}}'{{.ID}}': { maxX: {{.MaxElementX}}, maxY: {{.MaxElementY}} },{{end}}
+    };
+
+    function checkFit() {
+      var sheet = SHEETS[document.getElementById('sheet_id').value];
+      var content = CONTENTS[document.getElementById('content_id').value];
+      var warn = document.getElementById('fit-warning');
+      if (!warn) return;
+      if (sheet && content && (content.maxX > sheet.lw || content.maxY > sheet.lh)) {
+        warn.textContent = 'Let op: sommige elementen van deze inhoud lijken buiten het etiket van dit blad te vallen (etiket ' +
+          sheet.lw.toFixed(1) + ' x ' + sheet.lh.toFixed(1) + ' mm) -- controleer de proefdruk.';
+        warn.style.display = '';
+      } else {
+        warn.style.display = 'none';
+      }
+    }
+
+    function filterRows() {
+      var q = (document.getElementById('search-input').value || '').toLowerCase();
+      var selectedTags = Array.prototype.map.call(
+        document.querySelectorAll('.tag-filter:checked'),
+        function (el) { return el.value; }
+      );
+
+      document.querySelectorAll('#contacts-body tr').forEach(function (row) {
+        if (row.dataset.search === undefined) return; // "no contacts" placeholder row
+
+        var text = row.dataset.search.toLowerCase();
+        var matchesSearch = q === '' || text.indexOf(q) !== -1;
+
+        var matchesTags = true;
+        if (selectedTags.length > 0) {
+          var rowTags = (row.dataset.tags || '').split(',').map(function (t) { return t.trim(); });
+          matchesTags = selectedTags.some(function (t) { return rowTags.indexOf(t) !== -1; });
+        }
+
+        row.style.display = (matchesSearch && matchesTags) ? '' : 'none';
+      });
+    }
+
+    function selectVisible(checked) {
+      document.querySelectorAll('#contacts-body tr').forEach(function (row) {
+        if (row.style.display === 'none') return;
+        var cb = row.querySelector('.contact-check');
+        if (cb) cb.checked = checked;
+      });
+      updateCount();
+    }
+
+    function updateCount() {
+      var n = document.querySelectorAll('.contact-check:checked').length;
+      var el = document.getElementById('selected-count');
+      if (el) el.textContent = n;
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      var body = document.getElementById('contacts-body');
+      if (body) body.addEventListener('change', updateCount);
+
+      FILTER_TAGS.forEach(function (tag) {
+        var cb = document.querySelector('.tag-filter[value="' + tag.replace(/"/g, '\\"') + '"]');
+        if (cb) cb.checked = true;
+      });
+
+      filterRows();
+      if (AUTO_SELECT) selectVisible(true);
+      updateCount();
+      checkFit();
+    });
+  </script>
+
+</main>
+</body>
+</html>
+{{end}}

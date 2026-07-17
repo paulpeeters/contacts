@@ -1,0 +1,153 @@
+{{define "label_sheet_form"}}
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{if .Sheet.ID}}Etikettenblad bewerken{{else}}Nieuw etikettenblad{{end}}</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+<style>
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 1rem; }
+  #grid-preview-wrap { max-width: 320px; }
+</style>
+</head>
+<body>
+{{template "nav"}}
+<main class="container">
+  <h1>{{if .Sheet.ID}}Etikettenblad bewerken: {{.Sheet.Name}}{{else}}Nieuw etikettenblad{{end}}</h1>
+
+  {{if .Sheet.ID}}
+  <form hx-put="/label-sheets/{{.Sheet.ID}}">
+  {{else}}
+  <form hx-post="/label-sheets">
+  {{end}}
+
+    <label>Naam
+      <input type="text" name="name" value="{{.Sheet.Name}}" required>
+    </label>
+
+    <h2>Papier</h2>
+    <p>
+      <button type="button" class="secondary outline" onclick="setPreset(210,297)">A4 (210 &times; 297 mm)</button>
+      <button type="button" class="secondary outline" onclick="setPreset(215.9,279.4)">Letter (215.9 &times; 279.4 mm)</button>
+      <button type="button" class="secondary outline" onclick="setPreset(148,210)">A5 (148 &times; 210 mm)</button>
+    </p>
+    <div class="grid-4">
+      <label>Breedte (mm)
+        <input type="number" step="0.1" min="1" id="paper_width_mm" name="paper_width_mm" value="{{.Sheet.PaperWidthMM}}" required>
+      </label>
+      <label>Hoogte (mm)
+        <input type="number" step="0.1" min="1" id="paper_height_mm" name="paper_height_mm" value="{{.Sheet.PaperHeightMM}}" required>
+      </label>
+      <label>Etiketten horizontaal
+        <input type="number" step="1" min="1" id="cols" name="cols" value="{{.Sheet.Cols}}" required>
+      </label>
+      <label>Etiketten verticaal
+        <input type="number" step="1" min="1" id="label_rows" name="label_rows" value="{{.Sheet.Rows}}" required>
+      </label>
+    </div>
+
+    <h2>Randen en tussenruimte</h2>
+    <div class="grid-4">
+      <label>Rand links (mm)
+        <input type="number" step="0.1" min="0" id="margin_left_mm" name="margin_left_mm" value="{{.Sheet.MarginLeftMM}}">
+      </label>
+      <label>Rand rechts (mm)
+        <input type="number" step="0.1" min="0" id="margin_right_mm" name="margin_right_mm" value="{{.Sheet.MarginRightMM}}">
+      </label>
+      <label>Rand boven (mm)
+        <input type="number" step="0.1" min="0" id="margin_top_mm" name="margin_top_mm" value="{{.Sheet.MarginTopMM}}">
+      </label>
+      <label>Rand onder (mm)
+        <input type="number" step="0.1" min="0" id="margin_bottom_mm" name="margin_bottom_mm" value="{{.Sheet.MarginBottomMM}}">
+      </label>
+      <label>Tussenruimte horizontaal (mm)
+        <input type="number" step="0.1" min="0" id="gap_h_mm" name="gap_h_mm" value="{{.Sheet.GapHMM}}">
+      </label>
+      <label>Tussenruimte verticaal (mm)
+        <input type="number" step="0.1" min="0" id="gap_v_mm" name="gap_v_mm" value="{{.Sheet.GapVMM}}">
+      </label>
+    </div>
+
+    <p>Berekende etiketgrootte: <strong id="calc-label-w">-</strong> &times; <strong id="calc-label-h">-</strong> mm</p>
+
+    <div id="grid-preview-wrap">
+      <h3>Rasterindeling</h3>
+      <svg id="grid-preview" width="100%" viewBox="0 0 210 297" style="border:1px solid #ccc; background:#fafafa"></svg>
+    </div>
+
+    <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:1.5rem;">
+      <button type="submit" style="width:auto;">Etikettenblad opslaan</button>
+      <button type="button" class="secondary outline" style="width:auto;" onclick="window.location.href='/label-sheets'">Annuleren</button>
+    </div>
+  </form>
+
+</main>
+
+<script>
+  function num(id) {
+    var el = document.getElementById(id);
+    if (!el) return 0;
+    var v = parseFloat(el.value);
+    return isNaN(v) ? 0 : v;
+  }
+
+  function intVal(id) {
+    var el = document.getElementById(id);
+    if (!el) return 0;
+    var v = parseInt(el.value, 10);
+    return isNaN(v) ? 0 : v;
+  }
+
+  function setPreset(w, h) {
+    document.getElementById('paper_width_mm').value = w;
+    document.getElementById('paper_height_mm').value = h;
+    recalc();
+  }
+
+  function recalc() {
+    var pw = num('paper_width_mm'), ph = num('paper_height_mm');
+    var cols = intVal('cols'), rows = intVal('label_rows');
+    var ml = num('margin_left_mm'), mr = num('margin_right_mm');
+    var mt = num('margin_top_mm'), mb = num('margin_bottom_mm');
+    var gh = num('gap_h_mm'), gv = num('gap_v_mm');
+
+    var lw = cols > 0 ? (pw - ml - mr - (cols - 1) * gh) / cols : 0;
+    var lh = rows > 0 ? (ph - mt - mb - (rows - 1) * gv) / rows : 0;
+
+    var wOut = document.getElementById('calc-label-w');
+    var hOut = document.getElementById('calc-label-h');
+    if (wOut) wOut.textContent = lw.toFixed(1);
+    if (hOut) hOut.textContent = lh.toFixed(1);
+
+    var svg = document.getElementById('grid-preview');
+    if (svg && pw > 0 && ph > 0) {
+      svg.setAttribute('viewBox', '0 0 ' + pw + ' ' + ph);
+      var rects = '<rect x="0" y="0" width="' + pw + '" height="' + ph + '" fill="white" stroke="#999" stroke-width="0.5"/>';
+      if (lw > 0 && lh > 0 && cols > 0 && rows > 0) {
+        for (var ri = 0; ri < rows; ri++) {
+          for (var ci = 0; ci < cols; ci++) {
+            var x = ml + ci * (lw + gh);
+            var y = mt + ri * (lh + gv);
+            rects += '<rect x="' + x + '" y="' + y + '" width="' + lw + '" height="' + lh + '" fill="#e8f0fe" stroke="#4285f4" stroke-width="0.3"/>';
+          }
+        }
+      }
+      svg.innerHTML = rects;
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    ['paper_width_mm', 'paper_height_mm', 'cols', 'label_rows',
+     'margin_left_mm', 'margin_right_mm', 'margin_top_mm', 'margin_bottom_mm',
+     'gap_h_mm', 'gap_v_mm'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('input', recalc);
+    });
+    recalc();
+  });
+</script>
+</body>
+</html>
+{{end}}

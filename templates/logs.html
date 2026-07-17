@@ -1,0 +1,22 @@
+{{define "logs"}}
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Logs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+{{template "nav"}}
+<main class="container">
+  <h1>Logs</h1>
+  <p>Nieuwste bovenaan. Er is bewust geen consolevenster (zie de opzet als
+  Windows-app) &mdash; dit is de plek om te zien of alles goed draait.</p>
+  <p><a href="/logs" role="button" class="secondary outline">Verversen</a></p>
+  <pre style="max-height:70vh; overflow:auto; background:#f5f5f5; padding:1rem; white-space:pre-wrap; word-break:break-word;">{{if not .}}(nog geen log-regels){{end}}{{range .}}{{.}}{{end}}</pre>
+</main>
+</body>
+</html>
+{{end}}

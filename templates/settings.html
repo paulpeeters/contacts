@@ -1,0 +1,32 @@
+{{define "settings"}}
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Instellingen</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+{{template "nav"}}
+<main class="container">
+  <h1>Instellingen</h1>
+
+  <form hx-put="/settings">
+    <label>Eigen land
+      <input type="text" name="home_country" value="{{.HomeCountry}}" required>
+      <small>
+        Gebruikt door de <code>{ForeignCountry}</code>-plaatshouder bij het printen van etiketten:
+        die blijft leeg zodra het land van een huishouden hiermee overeenkomt (hoofdletter-
+        en accentongevoelig, bv. "belgie" en "België" gelden als hetzelfde), en toont anders
+        het land in hoofdletters — zo verschijnt het land enkel op etiketten voor het buitenland,
+        zoals gebruikelijk bij post.
+      </small>
+    </label>
+    <button type="submit">Opslaan</button>
+  </form>
+</main>
+</body>
+</html>
+{{end}}

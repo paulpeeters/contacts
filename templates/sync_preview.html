@@ -1,0 +1,81 @@
+{{define "sync_preview"}}
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sync controleren</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+{{template "nav"}}
+<main class="container">
+  <h1>Sync controleren</h1>
+
+  <p>
+    <strong>{{.NewContacts}}</strong> nieuw(e) contact(en),
+    <strong>{{.UpdatedContacts}}</strong> bijgewerkt contact(en)
+    ({{.UnchangedContacts}} ongewijzigd),
+    <strong>{{.NewHouseholds}}</strong> nieuw(e) huishouden(s),
+    <strong>{{.UpdatedHouseholds}}</strong> bijgewerkt huishouden(s)
+    ({{.UnchangedHouseholds}} ongewijzigd).
+    Alleen contacten/huishoudens waarvan de gegevens echt verschillen van wat
+    er nu in de database staat, worden als "bijwerken" gemarkeerd en
+    weggeschreven &mdash; ongewijzigde rijen worden overgeslagen.
+    Er wordt nog niets weggeschreven — dat gebeurt pas na bevestiging.
+    Rijen met hetzelfde "nieuw (groep N)" nummer hieronder delen straks &eacute;&eacute;n
+    nieuw huishouden; controleer dat dit klopt voor je bevestigt.
+  </p>
+
+  {{if .Errors}}
+  <article style="border-left: 4px solid #c00">
+    <strong>Kan niet bevestigd worden — corrigeer eerst het bestand:</strong>
+    <ul>
+      {{range .Errors}}<li>{{.}}</li>{{end}}
+    </ul>
+  </article>
+  <p><a href="/contacts/sync" role="button">&larr; Ander bestand uploaden</a></p>
+  {{else}}
+
+  {{if .Warnings}}
+  <article style="border-left: 4px solid #d9820b">
+    <strong>Waarschuwingen (blokkeren niet, maar controleer even):</strong>
+    <ul>
+      {{range .Warnings}}<li>{{.}}</li>{{end}}
+    </ul>
+  </article>
+  {{end}}
+
+  <div style="overflow-x:auto">
+  <table>
+    <thead>
+      <tr><th>Rij</th><th>Contact</th><th>Actie</th><th>Huishouden</th><th>Actie</th></tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr>
+        <td>{{.RowNum}}</td>
+        <td>{{.Contact.FirstName}} {{.Contact.LastName}}</td>
+        <td>{{if .IsNewContact}}nieuw{{else if .ContactChanged}}bijwerken (ID {{.ContactID}}){{else}}ongewijzigd (ID {{.ContactID}}){{end}}</td>
+        <td>{{.Household.Label}}</td>
+        <td>{{if .IsNewHousehold}}nieuw (groep {{.NewHouseholdGroup}}){{else if .HouseholdChanged}}bijwerken (ID {{.HouseholdID}}){{else}}ongewijzigd (ID {{.HouseholdID}}){{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  </div>
+
+  <form method="post" action="/contacts/sync/confirm">
+    <input type="hidden" name="sync_id" value="{{.SyncID}}">
+    <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:1rem;">
+      <button type="submit" style="width:auto;">Bevestigen en synchroniseren</button>
+      <button type="button" class="secondary outline" style="width:auto;" onclick="window.location.href='/contacts'">Annuleren</button>
+    </div>
+  </form>
+  {{end}}
+
+</main>
+</body>
+</html>
+{{end}}

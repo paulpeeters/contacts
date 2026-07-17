@@ -1,0 +1,108 @@
+{{define "household_form"}}
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{if .Household.ID}}Huishouden bewerken{{else}}Huishouden toevoegen{{end}}</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+{{template "nav"}}
+<main class="container">
+  <h1>{{if .Household.ID}}Huishouden bewerken{{else}}Huishouden toevoegen{{end}}</h1>
+
+  {{if .Household.ID}}
+  <form hx-put="/households/{{.Household.ID}}" id="household-form">
+  {{else}}
+  <form hx-post="/households" id="household-form">
+  {{end}}
+    <label>Aanhef op etiket <small>(bv. "Familie Peeters-Janssens", "Piet en Greet Peeters-Janssens en kinderen")</small>
+      <input type="text" name="label" value="{{.Household.Label}}" required>
+    </label>
+
+    <label>Adres
+      <input type="text" name="address" value="{{.Household.Address}}">
+    </label>
+
+    <div class="grid">
+      <label>Postcode
+        <input type="text" name="zip" value="{{.Household.Zip}}">
+      </label>
+      <label>Stad
+        <input type="text" name="city" value="{{.Household.City}}">
+      </label>
+      <label>Land
+        <input type="text" name="country" value="{{.Household.Country}}">
+      </label>
+    </div>
+
+    <div class="grid">
+      <label>Telefoon (gedeeld/vast)
+        <input type="text" name="phone" value="{{.Household.Phone}}">
+      </label>
+      <label>E-mail (gedeeld)
+        <input type="email" name="email" value="{{.Household.Email}}">
+      </label>
+    </div>
+
+    <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:1.5rem;">
+      <button type="submit" style="width:auto;">Opslaan</button>
+      <button type="button" class="secondary outline" style="width:auto;" onclick="window.location.href='/households'">Annuleren</button>
+    </div>
+  </form>
+
+  {{if .Household.ID}}
+  <h2>Leden</h2>
+  <table>
+    <thead>
+      <tr><th>Naam</th><th></th></tr>
+    </thead>
+    <tbody>
+      {{range .Members}}
+      <tr>
+        <td>{{.FirstName}} {{.LastName}}</td>
+        <td><a href="/contacts/{{.ID}}/edit">Bewerken</a></td>
+      </tr>
+      {{else}}
+      <tr><td colspan="2">Nog geen leden. Wijs dit huishouden toe vanaf een contact.</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  <p><a href="/contacts/new?household_id={{.Household.ID}}" id="new-contact-link">+ Nieuw contact in dit huishouden</a></p>
+  {{end}}
+
+  <script>
+    // Serializes every named field's current value, so we can tell whether
+    // the household form has unsaved changes before letting the user
+    // navigate away via "+ Nieuw contact in dit huishouden".
+    function serializeHouseholdForm(form) {
+      return Array.prototype.map.call(form.elements, function (el) {
+        if (!el.name) return '';
+        if (el.type === 'checkbox' || el.type === 'radio') return el.name + '=' + el.checked;
+        return el.name + '=' + el.value;
+      }).join('&');
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      var form = document.getElementById('household-form');
+      var link = document.getElementById('new-contact-link');
+      if (!form || !link) return;
+
+      var initialState = serializeHouseholdForm(form);
+      link.addEventListener('click', function (evt) {
+        if (serializeHouseholdForm(form) === initialState) return;
+        evt.preventDefault();
+        var href = link.getAttribute('href');
+        appConfirm('Dit huishouden heeft niet-opgeslagen wijzigingen. Toch een nieuw contact toevoegen zonder op te slaan?', function () {
+          window.location.href = href;
+        });
+      });
+    });
+  </script>
+
+</main>
+</body>
+</html>
+{{end}}

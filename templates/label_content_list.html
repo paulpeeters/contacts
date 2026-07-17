@@ -1,0 +1,44 @@
+{{define "label_content_list"}}
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Etiketinhoud</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+{{template "nav"}}
+<main class="container">
+  <h1>Etiketinhoud</h1>
+  <p><small>Welk veld waar komt op &eacute;&eacute;n etiket. Een inhoud is niet gekoppeld aan &eacute;&eacute;n
+  <a href="/label-sheets">etikettenblad</a> &mdash; dezelfde inhoud kan op elk blad gebruikt worden zolang
+  het etiket groot genoeg is. Bij het afdrukken kies je welke inhoud met welk blad gecombineerd wordt.</small></p>
+  <p><a href="/label-contents/new" role="button">+ Nieuwe inhoud</a></p>
+  <table>
+    <thead>
+      <tr><th>Naam</th><th>Aantal velden</th><th></th></tr>
+    </thead>
+    <tbody>
+      {{range .}}
+      <tr id="content-{{.ID}}">
+        <td><a href="/label-contents/{{.ID}}/edit">{{.Name}}</a></td>
+        <td>{{len .Elements}}</td>
+        <td>
+          <button class="secondary outline"
+                  hx-delete="/label-contents/{{.ID}}"
+                  hx-target="#content-{{.ID}}"
+                  hx-swap="outerHTML"
+                  hx-confirm="Inhoud '{{.Name}}' verwijderen?">Verwijderen</button>
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="3">Nog geen inhoud. <a href="/label-contents/new">Maak er een aan</a>.</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+</main>
+</body>
+</html>
+{{end}}

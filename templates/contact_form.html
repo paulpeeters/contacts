@@ -1,0 +1,203 @@
+{{define "contact_form"}}
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{if .Contact.ID}}Contact bewerken{{else}}Contact toevoegen{{end}}</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+{{template "nav"}}
+<main class="container">
+  <h1>{{if .Contact.ID}}Contact bewerken{{else}}Contact toevoegen{{end}}</h1>
+
+  {{if .Contact.ID}}
+  <form hx-put="/contacts/{{.Contact.ID}}" id="contact-form">
+  {{else}}
+  <form hx-post="/contacts" id="contact-form">
+  {{end}}
+    <div class="grid">
+      <label>Voornaam
+        <input type="text" name="first_name" value="{{.Contact.FirstName}}" required>
+      </label>
+      <label>Achternaam
+        <input type="text" name="last_name" value="{{.Contact.LastName}}" required>
+      </label>
+    </div>
+
+    <div class="grid">
+      <label>Geslacht
+        <select name="gender">
+          <option value="" {{if eq .Contact.Gender ""}}selected{{end}}>-</option>
+          <option value="Female" {{if eq .Contact.Gender "Female"}}selected{{end}}>Vrouw</option>
+          <option value="Male" {{if eq .Contact.Gender "Male"}}selected{{end}}>Man</option>
+          <option value="Other" {{if eq .Contact.Gender "Other"}}selected{{end}}>Anders</option>
+        </select>
+      </label>
+      <label>Geboortedatum
+        <input type="date" name="birthdate" value="{{.Contact.Birthdate}}">
+      </label>
+      <label>Mobiel <small>(persoonlijk)</small>
+        <input type="text" name="mobile" value="{{.Contact.Mobile}}">
+      </label>
+    </div>
+
+    <label>E-mail <small>(persoonlijk, apart van het gedeelde e-mailadres van het huishouden)</small>
+      <input type="email" name="email" value="{{.Contact.Email}}">
+    </label>
+
+    <label>Tags <small>(komma-gescheiden)</small>
+      <div style="display:flex; gap:0.5rem; align-items:center;">
+        <input type="text" id="tags-input" name="tags" value="{{.Contact.Tags}}" placeholder="bv. vriend, werk, buur" style="flex:1;">
+        <button type="button" class="secondary outline" style="width:auto; white-space:nowrap;" onclick="openTagPicker()">Kies uit bestaande tags</button>
+      </div>
+    </label>
+
+    <label>Laatst geverifieerd op
+      <input type="date" name="last_verified_on" value="{{.Contact.LastVerifiedOn}}">
+    </label>
+
+    <hr>
+
+    <label>Huishouden <small>(gedeeld adres, telefoon, e-mail en aanhef op etiket)</small>
+      <select name="household_id" id="household-select" onchange="toggleNewHousehold()">
+        <option value="new" {{if not .Contact.HouseholdID}}selected{{end}}>&mdash; nieuw huishouden aanmaken &mdash;</option>
+        {{$hid := .Contact.HouseholdID}}
+        {{range .Households}}
+        <option value="{{.ID}}" {{if eq .ID $hid}}selected{{end}}>{{.Label}}</option>
+        {{end}}
+      </select>
+    </label>
+
+    {{if .Contact.HouseholdID}}
+    <p><a href="/households/{{.Contact.HouseholdID}}/edit" id="household-edit-link">Huishoudgegevens (adres, telefoon, e-mail) bewerken &rarr;</a></p>
+    {{end}}
+
+    <fieldset id="new-household-fields">
+      <legend>Nieuw huishouden</legend>
+      <label>Aanhef op etiket <small>(bv. "Familie Peeters-Janssens")</small>
+        <input type="text" name="label">
+      </label>
+      <label>Adres
+        <input type="text" name="address">
+      </label>
+      <div class="grid">
+        <label>Postcode
+          <input type="text" name="zip">
+        </label>
+        <label>Stad
+          <input type="text" name="city">
+        </label>
+        <label>Land
+          <input type="text" name="country">
+        </label>
+      </div>
+      <div class="grid">
+        <label>Telefoon (gedeeld/vast)
+          <input type="text" name="phone">
+        </label>
+        <label>E-mail (gedeeld)
+          <input type="email" name="email">
+        </label>
+      </div>
+    </fieldset>
+
+    <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:1.5rem;">
+      <button type="submit" style="width:auto;">Opslaan</button>
+      <button type="button" class="secondary outline" style="width:auto;" onclick="window.location.href='/contacts'">Annuleren</button>
+    </div>
+  </form>
+
+  <!-- Tag picker: an alternative to typing CSV by hand, offering every tag
+       already used by any contact as checkboxes. Deliberately outside the
+       <form> (like nav.html's shared modal) so its checkboxes never become
+       part of #contact-form's fields or the unsaved-changes dirty check --
+       only the #tags-input value they write back to matters there. -->
+  <dialog id="tag-picker-modal">
+    <article>
+      <h3>Kies tags</h3>
+      {{if .AllTags}}
+      <div style="max-height:50vh; overflow-y:auto; display:flex; flex-direction:column; gap:0.35rem;">
+        {{range .AllTags}}
+        <label><input type="checkbox" value="{{.}}"> {{.}}</label>
+        {{end}}
+      </div>
+      {{else}}
+      <p>Nog geen bestaande tags &mdash; typ ze rechtstreeks in het tekstveld.</p>
+      {{end}}
+      <footer>
+        <button type="button" class="secondary outline" onclick="document.getElementById('tag-picker-modal').close()">Annuleren</button>
+        <button type="button" onclick="applyTagPicker()">Toepassen</button>
+      </footer>
+    </article>
+  </dialog>
+
+  <script>
+    function currentTagList() {
+      var input = document.getElementById('tags-input');
+      return input.value.split(',').map(function (t) { return t.trim(); }).filter(Boolean);
+    }
+
+    function openTagPicker() {
+      var current = currentTagList();
+      document.querySelectorAll('#tag-picker-modal input[type=checkbox]').forEach(function (cb) {
+        cb.checked = current.indexOf(cb.value) !== -1;
+      });
+      document.getElementById('tag-picker-modal').showModal();
+    }
+
+    function applyTagPicker() {
+      var checkboxes = document.querySelectorAll('#tag-picker-modal input[type=checkbox]');
+      var known = Array.prototype.map.call(checkboxes, function (cb) { return cb.value; });
+      var checked = Array.prototype.filter.call(checkboxes, function (cb) { return cb.checked; })
+        .map(function (cb) { return cb.value; });
+      // Preserve any tag the user already typed that isn't in the known-tags
+      // list (e.g. a brand new one), so opening the picker never silently
+      // drops it.
+      var custom = currentTagList().filter(function (t) { return known.indexOf(t) === -1; });
+      document.getElementById('tags-input').value = checked.concat(custom).join(', ');
+      document.getElementById('tag-picker-modal').close();
+    }
+
+    function toggleNewHousehold() {
+      var sel = document.getElementById('household-select');
+      var fs = document.getElementById('new-household-fields');
+      fs.style.display = (sel.value === 'new') ? '' : 'none';
+    }
+
+    // Serializes every named field's current value, so we can tell whether
+    // the form has unsaved changes before letting the user navigate away via
+    // the "Huishoudgegevens bewerken" link (see below).
+    function serializeContactForm(form) {
+      return Array.prototype.map.call(form.elements, function (el) {
+        if (!el.name) return '';
+        if (el.type === 'checkbox' || el.type === 'radio') return el.name + '=' + el.checked;
+        return el.name + '=' + el.value;
+      }).join('&');
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      toggleNewHousehold();
+
+      var form = document.getElementById('contact-form');
+      var link = document.getElementById('household-edit-link');
+      if (!form || !link) return;
+
+      var initialState = serializeContactForm(form);
+      link.addEventListener('click', function (evt) {
+        if (serializeContactForm(form) === initialState) return;
+        evt.preventDefault();
+        var href = link.getAttribute('href');
+        appConfirm('Dit contact heeft niet-opgeslagen wijzigingen. Toch naar de huishoudgegevens gaan zonder op te slaan?', function () {
+          window.location.href = href;
+        });
+      });
+    });
+  </script>
+
+</main>
+</body>
+</html>
+{{end}}

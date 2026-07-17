@@ -1,0 +1,50 @@
+{{define "sync_upload"}}
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Synchroniseren vanuit Excel</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+{{template "nav"}}
+<main class="container">
+  <h1>Synchroniseren vanuit Excel</h1>
+
+  <p>
+    Bedoeld om een bestand van <a href="/contacts/export">Exporteren naar Excel</a> te bewerken
+    en de wijzigingen terug te zetten. Elke rij is één contact; huishoudvelden
+    (adres, gedeelde telefoon/e-mail, aanhef) staan dus dubbel als een huishouden meerdere leden heeft.
+    Nog geen bestand om mee te starten? <a href="/contacts/sync/sample">Voorbeeld-Excel downloaden</a>
+    — met de verwachte kolommen op de eerste rij en 2 voorbeeldcontacten uit hetzelfde huishouden
+    (ContactID/HouseholdID op 0 en identieke huishoudgegevens, delen dus automatisch één nieuw
+    huishouden bij het synchroniseren).
+  </p>
+
+  <article>
+    <strong>Hoe de ID-kolommen werken:</strong>
+    <ul>
+      <li><code>ContactID</code> / <code>HouseholdID</code> op <strong>0</strong> (of leeg) &rarr; wordt aangemaakt als nieuw contact/huishouden.</li>
+      <li><code>ContactID</code> / <code>HouseholdID</code> ingevuld met een bestaand ID &rarr; dat contact/huishouden wordt volledig overschreven met de waarden op die rij (ook lege velden worden dus leeggemaakt — dit is een volledige overschrijving, geen aanvulling van enkel de ingevulde velden).</li>
+      <li>Een rij gewoon verwijderen uit het bestand verwijdert <strong>niets</strong> uit de database — synchroniseren maakt enkel aan of werkt bij, nooit verwijderen. Verwijderen doe je via de contacten- of huishoudenslijst.</li>
+      <li>Twee (of meer) rijen met <code>HouseholdID</code> = 0 die <strong>identieke</strong> huishoudgegevens hebben (aanhef, adres, postcode, stad, land, telefoon, e-mail — allemaal exact gelijk) delen automatisch &eacute;&eacute;n nieuw aangemaakt huishouden. Verschilt ook maar &eacute;&eacute;n van die velden (bv. een tikfout), dan worden het toch aparte huishoudens — controleer dit dus op het overzichtsscherm vóór je bevestigt.</li>
+    </ul>
+  </article>
+
+  <p>Je krijgt na het uploaden altijd eerst een overzicht te zien — er wordt pas iets weggeschreven na bevestiging.</p>
+
+  <form method="post" action="/contacts/sync/preview" enctype="multipart/form-data">
+    <label>Excel-bestand (.xlsx)
+      <input type="file" name="file" accept=".xlsx" required>
+    </label>
+    <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:1rem;">
+      <button type="submit" style="width:auto;">Volgende: overzicht bekijken</button>
+      <button type="button" class="secondary outline" style="width:auto;" onclick="window.location.href='/contacts'">Annuleren</button>
+    </div>
+  </form>
+</main>
+</body>
+</html>
+{{end}}

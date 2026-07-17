@@ -1,0 +1,50 @@
+{{define "label_filter_list"}}
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Afdrukfilters</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+{{template "nav"}}
+<main class="container">
+  <h1>Afdrukfilters</h1>
+  <p><small>Een bewaarde selectie (zoekterm, tags, afdrukmodus) plus welk
+  <a href="/label-sheets">etikettenblad</a> en welke <a href="/label-contents">inhoud</a> ermee
+  afgedrukt worden &mdash; handig om snel terug op te roepen. Bewaren is optioneel: je kan ook
+  meteen afdrukken zonder een filter te bewaren.</small></p>
+  <p><a href="/label-filters/new" role="button">+ Nieuw filter</a></p>
+  <table>
+    <thead>
+      <tr><th>Naam</th><th>Etikettenblad</th><th>Inhoud</th><th>Afdrukken per</th><th></th></tr>
+    </thead>
+    <tbody>
+      {{$sheetNames := .SheetNames}}
+      {{$contentNames := .ContentNames}}
+      {{range .Filters}}
+      <tr id="filter-{{.ID}}">
+        <td><a href="/label-filters/{{.ID}}/edit">{{.Name}}</a></td>
+        <td>{{index $sheetNames .SheetID}}</td>
+        <td>{{index $contentNames .ContentID}}</td>
+        <td>{{if eq .PrintMode "household"}}Huishouden{{else}}Contact{{end}}</td>
+        <td>
+          <a href="/label-filters/{{.ID}}/edit" role="button" class="outline">Openen</a>
+          <button class="secondary outline"
+                  hx-delete="/label-filters/{{.ID}}"
+                  hx-target="#filter-{{.ID}}"
+                  hx-swap="outerHTML"
+                  hx-confirm="Filter '{{.Name}}' verwijderen?">Verwijderen</button>
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="5">Nog geen bewaarde filters. <a href="/label-filters/new">Direct afdrukken</a> kan ook zonder er een te bewaren.</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+</main>
+</body>
+</html>
+{{end}}

@@ -1,0 +1,387 @@
+{{define "label_content_form"}}
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{if .Content.ID}}Inhoud bewerken{{else}}Nieuwe inhoud{{end}}</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+<style>
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 1rem; }
+  #elements-table { display: block; overflow-x: auto; white-space: nowrap; font-size: 0.82rem; }
+  #elements-table th, #elements-table td { padding: 0.3rem 0.4rem; }
+  #elements-table input, #elements-table select {
+    min-width: 4rem; padding: 0.25rem 0.35rem; font-size: 0.82rem; height: auto;
+  }
+  #elements-table input[name="el_content[]"] { min-width: 9rem; }
+  #elements-table select.insert-field,
+  #elements-table select[name="el_font[]"] { min-width: 4.5rem; }
+  #elements-table button { padding: 0.25rem 0.5rem; font-size: 0.78rem; width: auto; }
+  .preview-panels { display: flex; flex-wrap: wrap; gap: 2rem; align-items: flex-start; }
+  #label-preview-outer { max-width: 320px; position: relative; overflow: visible; }
+  #label-preview {
+    position: relative;
+    background: white;
+    border: 1px solid #333;
+    box-sizing: border-box;
+    transform-origin: top left;
+  }
+  #label-preview span { position: absolute; white-space: pre; line-height: 1; }
+</style>
+</head>
+<body>
+{{template "nav"}}
+<main class="container">
+  <h1>{{if .Content.ID}}Inhoud bewerken: {{.Content.Name}}{{else}}Nieuwe inhoud{{end}}</h1>
+
+  {{if .Content.ID}}
+  <form hx-put="/label-contents/{{.Content.ID}}">
+  {{else}}
+  <form hx-post="/label-contents">
+  {{end}}
+
+    <label>Naam
+      <input type="text" name="name" value="{{.Content.Name}}" required>
+    </label>
+
+    <h2>Marge binnen elk etiket</h2>
+    <p><small>Een veiligheidsmarge om tekst niet tegen de rand te plaatsen &mdash; enkel een
+    hulplijn bij het ontwerpen, wordt niet afgedwongen bij het afdrukken.</small></p>
+    <div class="grid-4">
+      <label>Boven (mm)
+        <input type="number" step="0.1" min="0" id="padding_top_mm" name="padding_top_mm" value="{{.Content.PaddingTopMM}}">
+      </label>
+      <label>Rechts (mm)
+        <input type="number" step="0.1" min="0" id="padding_right_mm" name="padding_right_mm" value="{{.Content.PaddingRightMM}}">
+      </label>
+      <label>Onder (mm)
+        <input type="number" step="0.1" min="0" id="padding_bottom_mm" name="padding_bottom_mm" value="{{.Content.PaddingBottomMM}}">
+      </label>
+      <label>Links (mm)
+        <input type="number" step="0.1" min="0" id="padding_left_mm" name="padding_left_mm" value="{{.Content.PaddingLeftMM}}">
+      </label>
+    </div>
+
+    <h2 style="margin-top:0.5rem;">Inhoud van het etiket</h2>
+    <p>Elke rij is &eacute;&eacute;n regel tekst op het etiket, op een vaste positie (X/Y in mm vanaf
+    de linkerbovenhoek van &eacute;&eacute;n etiket, Y = de basislijn van de tekst). Typ vrije tekst en
+    gebruik de knop "veld invoegen" om een contactveld toe te voegen op de cursorpositie — zo kan je
+    bv. <code>{FirstName} {LastName}</code> combineren op &eacute;&eacute;n regel.</p>
+    <div id="elements-table">
+    <table>
+      <thead>
+        <tr>
+          <th>Inhoud</th><th>Veld invoegen</th><th>X (mm)</th><th>Y (mm)</th>
+          <th>Font</th><th>Grootte (pt)</th><th>Vet</th><th>Cursief</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="elements-body">
+        {{$fields := .Fields}}
+        {{$fonts := .Fonts}}
+        {{range .Content.Elements}}
+        <tr>
+          <td><input type="text" name="el_content[]" value="{{.Content}}" placeholder="bv. {FirstName} {LastName}"></td>
+          <td>
+            <select class="insert-field" onchange="insertPlaceholder(this)">
+              <option value="">+ veld</option>
+              {{range $fields}}
+              <option value="{{.Value}}">{{.Label}}</option>
+              {{end}}
+            </select>
+          </td>
+          <td><input type="number" step="0.1" name="el_x[]" value="{{.X}}"></td>
+          <td><input type="number" step="0.1" name="el_y[]" value="{{.Y}}"></td>
+          <td>
+            <select name="el_font[]">
+              {{$selFont := .FontFamily}}
+              {{range $fonts}}
+              <option value="{{.}}" {{if eq . $selFont}}selected{{end}}>{{.}}</option>
+              {{end}}
+            </select>
+          </td>
+          <td><input type="number" step="0.5" min="1" name="el_size[]" value="{{.FontSize}}"></td>
+          <td>
+            <select name="el_bold[]">
+              <option value="0" {{if not .Bold}}selected{{end}}>Nee</option>
+              <option value="1" {{if .Bold}}selected{{end}}>Ja</option>
+            </select>
+          </td>
+          <td>
+            <select name="el_italic[]">
+              <option value="0" {{if not .Italic}}selected{{end}}>Nee</option>
+              <option value="1" {{if .Italic}}selected{{end}}>Ja</option>
+            </select>
+          </td>
+          <td><button type="button" class="secondary outline" onclick="this.closest('tr').remove(); renderPreview();">Verwijder</button></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    </div>
+    <p style="margin-top:1rem;"><button type="button" onclick="addElementRow()">+ Element toevoegen</button></p>
+
+    <div class="preview-panels">
+      <div>
+        <h3>Weergave van &eacute;&eacute;n etiket</h3>
+        <label>Voorbeeld tegen etikettenblad
+          <select id="preview_sheet_id" onchange="onPreviewSheetChange()">
+            {{range .Sheets}}
+            <option value="{{.ID}}">{{.Name}} ({{printf "%.1f" .LabelWidthMM}} &times; {{printf "%.1f" .LabelHeightMM}} mm)</option>
+            {{end}}
+          </select>
+        </label>
+        <p><small>Met een voorbeeldcontact (Jan Janssens), niet met echte gegevens. De gestippelde lijn toont de marge binnen het etiket. Gezoomd voor leesbaarheid.
+        {{if not .Sheets}}Er zijn nog geen <a href="/label-sheets">etikettenbladen</a> om tegen te tonen.{{end}}</small></p>
+        <div id="label-preview-outer">
+          <div id="label-preview"></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:1.5rem;">
+      <button type="submit" style="width:auto;">Inhoud opslaan</button>
+      <button type="button" class="secondary outline" style="width:auto;" onclick="window.location.href='/label-contents'">Annuleren</button>
+    </div>
+  </form>
+
+  {{if .Content.ID}}
+  <h2>Proefdruk</h2>
+  <p>Genereert een PDF van deze inhoud op het gekozen etikettenblad, gevuld met een vast
+  voorbeeldcontact (niet je echte gegevens), met lichte hulplijnen rond elk etiket &mdash; handig
+  om tegen een leeg of gedeeltelijk gebruikt vel te houden en de uitlijning te controleren.
+  <strong>Kies bij het afdrukken "Werkelijke grootte / 100%"</strong>, niet "passend op pagina",
+  anders klopt de uitlijning niet meer. Gebruikt de laatst <em>opgeslagen</em> versie van deze
+  inhoud &mdash; sla eerst op als je net iets gewijzigd hebt.</p>
+  <form method="get" action="/label-contents/{{.Content.ID}}/proof" target="_blank">
+    <label>Etikettenblad
+      <select name="sheet_id" required>
+        {{range .Sheets}}
+        <option value="{{.ID}}">{{.Name}}</option>
+        {{end}}
+      </select>
+    </label>
+    <label>Start bij etiket # (1 = linksboven, telt van links naar rechts, rij per rij &mdash; handig als de eerste etiketten van het vel al gebruikt zijn)
+      <input type="number" name="start" min="1" value="1" style="max-width:8rem">
+    </label>
+    <button type="submit" {{if not .Sheets}}disabled{{end}}>Proefdruk downloaden (PDF)</button>
+  </form>
+
+  {{end}}
+
+  <template id="element-row-template">
+    <tr>
+      <td><input type="text" name="el_content[]" value="" placeholder="bv. {FirstName} {LastName}"></td>
+      <td>
+        <select class="insert-field" onchange="insertPlaceholder(this)">
+          <option value="">+ veld</option>
+          {{range .Fields}}
+          <option value="{{.Value}}">{{.Label}}</option>
+          {{end}}
+        </select>
+      </td>
+      <td><input type="number" step="0.1" name="el_x[]" value="0"></td>
+      <td><input type="number" step="0.1" name="el_y[]" value="0"></td>
+      <td>
+        <select name="el_font[]">
+          {{range .Fonts}}
+          <option value="{{.}}">{{.}}</option>
+          {{end}}
+        </select>
+      </td>
+      <td><input type="number" step="0.5" min="1" name="el_size[]" value="10"></td>
+      <td>
+        <select name="el_bold[]">
+          <option value="0" selected>Nee</option>
+          <option value="1">Ja</option>
+        </select>
+      </td>
+      <td>
+        <select name="el_italic[]">
+          <option value="0" selected>Nee</option>
+          <option value="1">Ja</option>
+        </select>
+      </td>
+      <td><button type="button" class="secondary outline" onclick="this.closest('tr').remove(); renderPreview();">Verwijder</button></td>
+    </tr>
+  </template>
+
+</main>
+
+<script>
+  // ---- sample data for the on-page preview only (not saved, not real) ----
+  var SAMPLE_CONTACT = {
+    SeqNo: '1',
+    ID: '42',
+    HouseholdID: '7',
+    FirstName: 'Jan',
+    LastName: 'Janssens',
+    HouseholdLabel: 'Familie Janssens-Peeters',
+    Address: 'Kerkstraat 12',
+    Zip: '9000',
+    City: 'GENT',
+    Country: 'België',
+    ForeignCountry: 'FRANKRIJK',
+    Email: 'jan.janssens@example.com',
+    PersonalEmail: 'jan.persoonlijk@example.com',
+    Phone: '09 123 45 67',
+    Mobile: '0475 12 34 56',
+    Gender: 'M',
+    Birthdate: '1980-05-14',
+    Tags: 'vriend, werk',
+    LastVerifiedOn: '2026-01-10'
+  };
+
+  // Label sizes (mm) of every saved sheet, for the "preview against" picker
+  // -- purely client-side, nothing here is saved with the content.
+  var SHEETS = [
+    {{range .Sheets}}
+    { id: '{{.ID}}', lw: {{.LabelWidthMM}}, lh: {{.LabelHeightMM}} },
+    {{end}}
+  ];
+
+  var FONT_CSS = {
+    Helvetica: 'Helvetica, Arial, sans-serif',
+    Times: '"Times New Roman", Times, serif',
+    Courier: '"Courier New", Courier, monospace'
+  };
+
+  var currentLabelW = 0;
+  var currentLabelH = 0;
+
+  function onPreviewSheetChange() {
+    var sel = document.getElementById('preview_sheet_id');
+    var id = sel ? sel.value : '';
+    var found = null;
+    for (var i = 0; i < SHEETS.length; i++) {
+      if (SHEETS[i].id === id) { found = SHEETS[i]; break; }
+    }
+    currentLabelW = found ? found.lw : 0;
+    currentLabelH = found ? found.lh : 0;
+    renderPreview();
+  }
+
+  function addElementRow() {
+    var tpl = document.getElementById('element-row-template');
+    var clone = tpl.content.cloneNode(true);
+    document.getElementById('elements-body').appendChild(clone);
+    renderPreview();
+  }
+
+  function insertPlaceholder(selectEl) {
+    var value = selectEl.value;
+    if (!value) return;
+    var row = selectEl.closest('tr');
+    var input = row.querySelector('input[name="el_content[]"]');
+    var token = '{' + value + '}';
+    var start = input.selectionStart != null ? input.selectionStart : input.value.length;
+    var end = input.selectionEnd != null ? input.selectionEnd : input.value.length;
+    input.value = input.value.slice(0, start) + token + input.value.slice(end);
+    var pos = start + token.length;
+    input.focus();
+    input.setSelectionRange(pos, pos);
+    selectEl.selectedIndex = 0;
+    renderPreview();
+  }
+
+  function num(id) {
+    var el = document.getElementById(id);
+    if (!el) return 0;
+    var v = parseFloat(el.value);
+    return isNaN(v) ? 0 : v;
+  }
+
+  function substitutePlaceholders(content) {
+    return content.replace(/\{(\w+)\}/g, function (m, key) {
+      return Object.prototype.hasOwnProperty.call(SAMPLE_CONTACT, key) ? SAMPLE_CONTACT[key] : m;
+    });
+  }
+
+  function escapeHtml(s) {
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function renderPreview() {
+    var box = document.getElementById('label-preview');
+    var outer = document.getElementById('label-preview-outer');
+    if (!box || !outer) return;
+
+    var lw = currentLabelW, lh = currentLabelH;
+    if (lw <= 0 || lh <= 0) {
+      box.innerHTML = '';
+      box.style.width = '0';
+      box.style.height = '0';
+      outer.style.width = '0';
+      outer.style.height = '0';
+      return;
+    }
+
+    box.style.width = lw + 'mm';
+    box.style.height = lh + 'mm';
+
+    var mmToPx = 96 / 25.4;
+    var scale = Math.min(6, 300 / (lw * mmToPx));
+    if (!isFinite(scale) || scale <= 0) scale = 1;
+    box.style.transform = 'scale(' + scale + ')';
+    outer.style.width = (lw * mmToPx * scale) + 'px';
+    outer.style.height = (lh * mmToPx * scale) + 'px';
+
+    var pt = num('padding_top_mm'), pr = num('padding_right_mm');
+    var pb = num('padding_bottom_mm'), pl = num('padding_left_mm');
+
+    var html = '<div style="position:absolute; left:' + pl + 'mm; top:' + pt + 'mm; ' +
+      'right:' + pr + 'mm; bottom:' + pb + 'mm; border:1px dashed #bbb;"></div>';
+
+    document.querySelectorAll('#elements-body tr').forEach(function (row) {
+      var contentEl = row.querySelector('input[name="el_content[]"]');
+      var xEl = row.querySelector('input[name="el_x[]"]');
+      var yEl = row.querySelector('input[name="el_y[]"]');
+      var fontEl = row.querySelector('select[name="el_font[]"]');
+      var sizeEl = row.querySelector('input[name="el_size[]"]');
+      var boldEl = row.querySelector('select[name="el_bold[]"]');
+      var italicEl = row.querySelector('select[name="el_italic[]"]');
+      if (!contentEl) return;
+
+      var x = parseFloat(xEl.value) || 0;
+      var y = parseFloat(yEl.value) || 0;
+      var size = parseFloat(sizeEl.value) || 10;
+      var font = fontEl.value;
+      var bold = boldEl.value === '1';
+      var italic = italicEl.value === '1';
+      var text = substitutePlaceholders(contentEl.value || '');
+
+      // Rough baseline-to-top correction (pt -> mm) so Y approximates fpdf's
+      // baseline-based positioning used later for the real PDF.
+      var topMm = Math.max(0, y - size * 0.3528 * 0.8);
+
+      var css = 'left:' + x + 'mm; top:' + topMm + 'mm; font-family:' + (FONT_CSS[font] || 'sans-serif') +
+        '; font-size:' + size + 'pt;';
+      if (bold) css += ' font-weight:bold;';
+      if (italic) css += ' font-style:italic;';
+
+      html += '<span style="' + css + '">' + escapeHtml(text) + '</span>';
+    });
+
+    box.innerHTML = html;
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    ['padding_top_mm', 'padding_right_mm', 'padding_bottom_mm', 'padding_left_mm'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('input', renderPreview);
+    });
+
+    var body = document.getElementById('elements-body');
+    if (body) {
+      body.addEventListener('input', renderPreview);
+      body.addEventListener('change', renderPreview);
+    }
+
+    onPreviewSheetChange();
+  });
+</script>
+</body>
+</html>
+{{end}}

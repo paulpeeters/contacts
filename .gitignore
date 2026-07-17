@@ -1,0 +1,14 @@
+# Runtime data -- generated on first run / during use, never something to
+# commit (this is a single-user local app; every install has its own).
+/contacts.db
+/contacts.db-journal
+/contacts.db-wal
+/contacts.db-shm
+/contacts-*.db
+/contacts.log
+/contacts-*.log
+/appsettings.json
+
+# Build artifacts
+/contacts.exe
+/contacts

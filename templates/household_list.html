@@ -1,0 +1,55 @@
+{{define "household_list"}}
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Huishoudens</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+{{template "nav"}}
+<main class="container">
+  <hgroup>
+    <h1>Huishoudens</h1>
+    <h2>{{len .}} huishouden(s)</h2>
+  </hgroup>
+
+  <p>
+    Een huishouden bundelt het gedeelde adres, telefoon en e-mailadres van een gezin of koppel, plus de
+    aanhef die op het etiket komt (bv. "Familie Peeters-Janssens"). Elk contact hoort bij precies één huishouden.
+  </p>
+
+  <p><a href="/households/new" role="button">+ Huishouden toevoegen</a></p>
+
+  <table>
+    <thead>
+      <tr><th>Aanhef (label)</th><th>Adres</th><th>Stad</th><th>Leden</th><th></th></tr>
+    </thead>
+    <tbody>
+      {{range .}}
+      <tr id="household-{{.ID}}">
+        <td><a href="/households/{{.ID}}/edit">{{.Label}}</a></td>
+        <td>{{.Address}}</td>
+        <td>{{.City}}</td>
+        <td>
+          {{range $i, $m := .Members}}{{if $i}}, {{end}}<a href="/contacts/{{$m.ID}}/edit">{{$m.FirstName}} {{$m.LastName}}</a>{{else}}<em>geen leden</em>{{end}}
+        </td>
+        <td>
+          <button class="secondary outline"
+                  hx-delete="/households/{{.ID}}"
+                  hx-target="#household-{{.ID}}"
+                  hx-swap="outerHTML"
+                  hx-confirm="Huishouden '{{.Label}}' verwijderen?">Verwijder</button>
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="5">Nog geen huishoudens. <a href="/households/new">Maak er één aan</a>.</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+</main>
+</body>
+</html>
+{{end}}
