@@ -58,7 +58,7 @@ func handleChooseDBSubmit(w http.ResponseWriter, r *http.Request) {
 		old.Close()
 	}
 
-	if err := saveAppSettings(exeDir, appSettings{LastDBPath: path, Port: currentPort}); err != nil {
+	if err := saveAppSettings(dataDir, appSettings{LastDBPath: path, Port: currentPort}); err != nil {
 		// Non-fatal: the database switch itself already succeeded, only the
 		// "remember this for next time" step failed.
 		log.Printf("kon appsettings.json niet bijwerken: %v", err)

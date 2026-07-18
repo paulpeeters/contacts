@@ -1,0 +1,18 @@
+services:
+  contacts:
+    build: .
+    image: contacts:latest
+    ports:
+      # Left-hand side is the port on the host; change it if 8080 is
+      # already taken there. Right-hand side must match whatever port the
+      # app actually listens on inside the container (8080 by default, or
+      # the "port" field in ./data/appsettings.json if you've set one).
+      - "8080:8080"
+    volumes:
+      # Everything the app needs to persist -- contacts.db, appsettings.json,
+      # contacts.log -- lives in here. Point this at wherever you want that
+      # data to actually live on the host.
+      - ./data:/app/data
+    environment:
+      - TZ=Europe/Brussels
+    restart: unless-stopped

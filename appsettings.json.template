@@ -1,4 +1,4 @@
 {
-  "last_db_path": "",
-  "port": 0
+  "last_db_path": "contacts.db",
+  "port": 8080
 }

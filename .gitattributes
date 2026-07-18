@@ -1,0 +1,18 @@
+# Alle tekstbestanden normaliseren en als LF uitchecken
+* text=auto eol=lf
+
+# Klassieke Windows command scripts
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binaire bestanden nooit converteren
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.7z binary
+*.dll binary
+*.exe binary

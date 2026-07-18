@@ -11,7 +11,10 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
+	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/gogpu/systray"
@@ -30,22 +33,36 @@ var (
 	appTray *systray.SystemTray
 
 	// exeDir is the directory the running executable lives in, computed once
-	// at startup. currentDBPath is whichever database file is currently
-	// open, and dbChooserShown tracks whether the database-chooser modal has
-	// already auto-opened once this run (see handleHome in home.go). logFile
-	// is contacts.log for this run (see filelog.go) -- nil if file logging
-	// couldn't be set up, in which case logging still works via stdout and
-	// the in-app /logs page, just not persisted to disk. listenAddr/appURL
-	// used to be consts (always port 8080) -- they're now resolved early in
-	// main() from appsettings.json's "port" field, falling back to
-	// defaultPort, since another program on some PCs already occupies 8080.
+	// at startup. dataDir (exeDir/data) is where appsettings.json,
+	// contacts.log and the default contacts.db actually live -- introduced
+	// alongside Docker support so there's a single folder to bind-mount as a
+	// volume; on first run any pre-existing root-level files get moved there
+	// automatically (see migrate.go). currentDBPath is whichever database
+	// file is currently open, and dbChooserShown tracks whether the
+	// database-chooser modal has already auto-opened once this run (see
+	// handleHome in home.go). logFile is contacts.log for this run (see
+	// filelog.go) -- nil if file logging couldn't be set up, in which case
+	// logging still works via stdout and the in-app /logs page, just not
+	// persisted to disk. listenAddr/appURL used to be consts (always port
+	// 8080) -- they're now resolved early in main() from appsettings.json's
+	// "port" field, falling back to defaultPort, since another program on
+	// some PCs already occupies 8080.
 	exeDir         string
+	dataDir        string
 	currentDBPath  string
 	currentPort    int
 	dbChooserShown bool
 	logFile        *os.File
 	listenAddr     string
 	appURL         string
+
+	// isDesktop is true when running as the native Windows exe, false in a
+	// Docker/Linux container (see runtime.GOOS check in main()). Gates
+	// Windows-only behavior: tray icon, browser auto-open, the
+	// "already running" check, and the "Afsluiten" shutdown button/route --
+	// in a container, restart: always would just relaunch it, so shutting
+	// down from the UI there is confusing rather than useful.
+	isDesktop bool
 )
 
 const (
@@ -78,57 +95,107 @@ func main() {
 	log.SetOutput(io.MultiWriter(safeStdout, logRing))
 	log.Printf("Contacts v%s wordt opgestart.", AppVersion)
 
-	// exeDir and appsettings.json both have to be read before the
-	// "already running?" check below, since that check needs to know which
-	// port to probe -- appsettings.json's "port" field (see appSettings in
-	// appsettings.go) can override the default, e.g. when another program
-	// on this PC already occupies 8080. Everything else that reads
-	// `settings` (the database path) still happens further down, unchanged.
+	// See the package-level isDesktop doc comment for what this gates.
+	isDesktop = runtime.GOOS == "windows"
+
+	// exeDir, dataDir and appsettings.json all have to be resolved before
+	// the "already running?" check below, since that check needs to know
+	// which port to probe -- appsettings.json's "port" field (see
+	// appSettings in appsettings.go) can override the default, e.g. when
+	// another program on this PC already occupies 8080.
 	var err error
 	exeDir, err = executableDir()
 	if err != nil {
 		fail("Contacts - fout bij opstarten", fmt.Sprintf("Kon de locatie van het programma niet bepalen:\n%v", err))
 	}
 
-	settings := loadAppSettings(exeDir)
+	// dataDir (exeDir/data) holds appsettings.json, contacts.log and the
+	// default contacts.db -- a single folder that's easy to bind-mount as a
+	// Docker volume, and that the standalone exe uses identically. Any
+	// files still sitting at the old default root-level location get moved
+	// in automatically (never touching a custom/explicitly-chosen database
+	// path such as a UNC path picked via the database-chooser modal).
+	dataDir = filepath.Join(exeDir, "data")
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		fail("Contacts - fout bij opstarten", fmt.Sprintf("Kon de datamap niet aanmaken (%s):\n%v", dataDir, err))
+	}
+	migrateLegacyDataFiles(exeDir, dataDir)
+
+	settings := loadAppSettings(dataDir)
 	currentPort = settings.Port
 	portSource := "ingesteld via appsettings.json"
 	if currentPort == 0 {
 		currentPort = defaultPort
 		portSource = "standaardpoort"
 	}
-	listenAddr = fmt.Sprintf("127.0.0.1:%d", currentPort)
+	// The listen host defaults to 127.0.0.1 on Windows (unchanged,
+	// security-conscious behavior for a desktop app) and 0.0.0.0 elsewhere
+	// (so a Docker container is reachable from outside without extra
+	// config), overridable either way via CONTACTS_LISTEN_HOST. appURL
+	// stays pinned to 127.0.0.1 regardless -- it's only used for the
+	// Windows-only self-probe and browser-open below, and 0.0.0.0 isn't a
+	// connectable client-side address.
+	listenHost := "0.0.0.0"
+	if isDesktop {
+		listenHost = "127.0.0.1"
+	}
+	if envHost := os.Getenv("CONTACTS_LISTEN_HOST"); envHost != "" {
+		listenHost = envHost
+	}
+	listenAddr = fmt.Sprintf("%s:%d", listenHost, currentPort)
 	appURL = fmt.Sprintf("http://127.0.0.1:%d", currentPort)
 
-	if alreadyRunning(appURL + "/contacts") {
+	if isDesktop && alreadyRunning(appURL+"/contacts") {
 		log.Println("Contacts lijkt al te draaien op " + appURL + ", browser wordt geopend.")
 		openBrowser(appURL)
 		return
 	}
 
 	log.Printf("Programmamap: %s", exeDir)
+	log.Printf("Datamap: %s", dataDir)
 	log.Printf("Poort: %d (%s)", currentPort, portSource)
+	log.Printf("Luistert op: %s", listenAddr)
 
-	// contacts.log lives next to the exe. This is layered on top of, not
-	// instead of, the existing stdout + in-app /logs ringbuffer -- if it
-	// can't be set up (e.g. read-only folder), we just carry on without it.
-	if lf, lfErr := setupFileLogging(exeDir); lfErr != nil {
+	// Respond to a stop signal (Ctrl+C, or `docker stop`'s SIGTERM) the same
+	// way the tray's "Afsluiten" item and the /shutdown endpoint already do,
+	// instead of the process being killed outright.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		sig := <-sigCh
+		log.Printf("Signaal ontvangen (%v), Contacts sluit af.", sig)
+		quitApp()
+	}()
+
+	// contacts.log lives in dataDir. This is layered on top of, not instead
+	// of, the existing stdout + in-app /logs ringbuffer -- if it can't be
+	// set up (e.g. read-only folder), we just carry on without it.
+	if lf, lfErr := setupFileLogging(dataDir); lfErr != nil {
 		log.Printf("kon niet naar %s loggen (logs blijven wel beschikbaar op stdout en /logs): %v", logFileName, lfErr)
 	} else {
 		logFile = lf
 		log.SetOutput(io.MultiWriter(safeStdout, logRing, logFile))
-		log.Printf("Logbestand: %s (archieven ouder dan 1 maand worden bij opstart automatisch opgeruimd)", filepath.Join(exeDir, logFileName))
+		log.Printf("Logbestand: %s (archieven ouder dan 1 maand worden bij opstart automatisch opgeruimd)", filepath.Join(dataDir, logFileName))
 	}
 
-	// The database path used to always be exeDir/contacts.db. Now the last
-	// path the user chose (via the database-chooser modal on the home page)
-	// is remembered in appsettings.json and reused on the next launch,
-	// falling back to the original default if there's no settings file yet.
+	// The database path used to always be exeDir/contacts.db, now
+	// dataDir/contacts.db. The last path the user chose (via the
+	// database-chooser modal on the home page) is remembered in
+	// appsettings.json and reused on the next launch, falling back to the
+	// default if there's no settings file yet.
 	currentDBPath = settings.LastDBPath
 	dbPathSource := "laatst gebruikt pad (appsettings.json)"
-	if currentDBPath == "" {
-		currentDBPath = filepath.Join(exeDir, "contacts.db")
+	switch currentDBPath {
+	case "":
+		currentDBPath = filepath.Join(dataDir, "contacts.db")
 		dbPathSource = "standaardpad (geen appsettings.json gevonden)"
+	case "contacts.db":
+		// A bare relative filename (e.g. hand-typed into appsettings.json)
+		// would otherwise resolve against the process's working directory,
+		// which isn't reliably exeDir/dataDir depending on how the exe was
+		// launched. Treat it as shorthand for the default location instead.
+		currentDBPath = filepath.Join(dataDir, "contacts.db")
+		dbPathSource = "standaardpad (relatief pad in appsettings.json)"
 	}
 	log.Printf("Databasepad: %s (%s)", currentDBPath, dbPathSource)
 
@@ -148,12 +215,15 @@ func main() {
 	}()
 	log.Printf("Database geopend, schema OK (versie %d).", CurrentSchemaVersion)
 
-	if err := saveAppSettings(exeDir, appSettings{LastDBPath: currentDBPath, Port: currentPort}); err != nil {
+	if err := saveAppSettings(dataDir, appSettings{LastDBPath: currentDBPath, Port: currentPort}); err != nil {
 		log.Printf("kon appsettings.json niet wegschrijven: %v", err)
 	}
 
 	tmpl, err = template.New("").Funcs(template.FuncMap{
 		"AppVersion": func() string { return AppVersion },
+		// IsDesktop: whether to show the "Afsluiten" button in nav.html --
+		// hidden in the Docker/headless case, see the isDesktop doc comment.
+		"IsDesktop": func() bool { return isDesktop },
 	}).ParseFS(templateFS, "templates/*.html")
 	if err != nil {
 		fail("Contacts - fout bij opstarten", fmt.Sprintf("Kon de ingebouwde templates niet laden:\n%v", err))
@@ -237,13 +307,22 @@ func main() {
 		}
 	}()
 
-	// Open the browser only once we know the listener is actually up.
-	go func() {
-		time.Sleep(300 * time.Millisecond)
-		openBrowser(appURL)
-	}()
+	if isDesktop {
+		// Open the browser only once we know the listener is actually up.
+		go func() {
+			time.Sleep(300 * time.Millisecond)
+			openBrowser(appURL)
+		}()
 
-	runTray()
+		runTray()
+		return
+	}
+
+	// Headless (non-Windows, e.g. Docker): no tray, no browser to open --
+	// just stay up as a plain foreground server until the signal handler
+	// above calls quitApp() on SIGINT/SIGTERM.
+	log.Println("Headless modus (geen Windows): geen systray/browser, wacht op stopsignaal.")
+	select {}
 }
 
 // runTray sets up the system tray icon (name/tooltip, "Openen in browser" and
@@ -344,7 +423,18 @@ func executableDir() (string, error) {
 // the tray icon is hard to find, or the tray failed to start. The response
 // is flushed before the process exits, so the browser still gets to show a
 // confirmation instead of a broken connection.
+//
+// Disabled outside isDesktop (the "Afsluiten" button itself is already
+// hidden there via the IsDesktop template func, but the route is guarded
+// here too in case something still posts to it directly) -- in a
+// Docker/headless deploy, restart: always would just relaunch the
+// container immediately, making a self-inflicted shutdown pointless and
+// confusing rather than useful.
 func handleShutdown(w http.ResponseWriter, r *http.Request) {
+	if !isDesktop {
+		http.Error(w, "Afsluiten via de browser is niet beschikbaar in deze deploy (container herstart toch automatisch).", http.StatusForbidden)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprint(w, `<main class="container"><h1>Contacts afgesloten</h1><p>Dit tabblad/venster kan gesloten worden.</p></main>`)
 	if f, ok := w.(http.Flusher); ok {

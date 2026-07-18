@@ -1,0 +1,22 @@
+# Runtime data -- never bake this into the image; it belongs in the
+# ./data volume mounted at /app/data instead.
+data/
+contacts.db
+contacts.db-journal
+contacts.db-wal
+contacts.db-shm
+contacts-*.db
+contacts.log
+contacts-*.log
+appsettings.json
+
+# Build artifacts for the Windows exe -- irrelevant to the Docker build,
+# which produces its own Linux binary.
+contacts.exe
+contacts
+rsrc_windows_amd64.syso
+
+# VCS/editor noise
+.git
+.gitignore
+*.md

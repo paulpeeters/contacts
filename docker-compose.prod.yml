@@ -1,0 +1,53 @@
+# Reference copy of the Dockhand stack definition -- Dockhand itself isn't
+# pointed at this file, its config is entered by pasting this YAML into the
+# Dockhand UI when creating/updating the stack. Keeping a copy here means
+# the exact config is version-controlled and documented instead of living
+# only inside Dockhand; update this file AND paste the change into Dockhand
+# when the two need to change together (e.g. a new port or image tag).
+#
+# Placeholders below (host path, host port) are deliberately generic --
+# fill in your own values before pasting into Dockhand, rather than
+# committing actual server paths/ports to this repo.
+#
+# Pattern: a generic minimal runtime image + a bind-mounted, pre-built app
+# folder + an explicit command to launch it (no custom image build/push).
+#
+# The Go equivalent of "a .NET runtime image + published dotnet output" is
+# "a base image with just tzdata/ca-certificates + a statically-linked Go
+# binary" -- gcr.io/distroless/static-debian12 fits that role (1.9MB,
+# includes tzdata + ca-certificates, no shell/package manager, which is fine
+# since CGO_ENABLED=0 means the binary has zero runtime dependencies of its
+# own).
+#
+# One flat host folder holds the binary. contacts.db/appsettings.json/
+# contacts.log end up in app/data/ (the app's own dataDir, resolved
+# relative to its own binary -- see main.go). That subfolder is protected
+# from every deploy at the deploy-script level, not via Docker: the deploy
+# script only ever rsyncs the "contacts" binary into app/, and its
+# PROTECTED_DIRS=("data") filter keeps rsync's --delete from ever touching
+# app/data/.
+#
+# Building: build/build.cmd in this repo (target: linux) cross-compiles
+# the linux/amd64 binary and stages it per build/build.env's
+# LINUX_DEPLOY_DIR -- note that's the "linux" target, not "docker": the
+# "docker" target builds a local test image instead (see docker-compose.yml)
+# and is unrelated to this file. Deploying (rsync + backup + restart) is
+# handled by a separate deploy script maintained outside this repo -- see
+# the README's "Deploying to a server" section.
+name: contacts-prod
+services:
+  contacts:
+    image: gcr.io/distroless/static-debian12
+    container_name: contacts-prod
+    restart: always
+    ports:
+      # Left-hand side: pick a free host port. Right-hand side must stay
+      # 8080 (the app's default listen port inside the container).
+      - 8080:8080
+    working_dir: /app
+    volumes:
+      # Replace with the actual host folder holding the "contacts" binary.
+      - /path/to/contacts-prod/app:/app
+    command: ["/app/contacts"]
+    environment:
+      - TZ=Europe/Brussels

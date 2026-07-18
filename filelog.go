@@ -9,9 +9,9 @@ import (
 	"time"
 )
 
-// logFileName is the current run's log file, kept next to contacts.exe
-// (same folder as contacts.db and appsettings.json) so it's easy to find
-// manually, e.g. to send along when reporting a problem.
+// logFileName is the current run's log file, kept in dataDir (same folder
+// as contacts.db and appsettings.json) so it's easy to find manually, e.g.
+// to send along when reporting a problem.
 const logFileName = "contacts.log"
 
 // maxLogAge is how long an archived (rotated) log file is kept around

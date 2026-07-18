@@ -3,7 +3,7 @@ package main
 // AppVersion is the app's own version number, shown in the nav bar and the
 // systray tooltip. There's no automated bump process -- edit the constant
 // below by hand and rebuild whenever you want to release a new version.
-const AppVersion = "1.0.1"
+const AppVersion = "1.0.2"
 
 // CurrentSchemaVersion is the database schema version this build of the app
 // expects. It's stored in the database itself (see ensureSchemaVersion in

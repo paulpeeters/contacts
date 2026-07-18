@@ -44,52 +44,193 @@ go run .
 This opens your default browser automatically at http://localhost:8080.
 Stop the server with Ctrl+C.
 
-## 4. Build a standalone Windows app
+## 4. Build & deploy
 
-**Optional, one-time: give `contacts.exe` its own icon** (otherwise it gets
-the generic default Go executable icon — harmless, just plain). `icon.ico`
-is already in this folder; Go itself can't embed a Windows exe icon, so a
-small, pure-Go helper tool writes it into a `.syso` resource file that `go
-build` then links in automatically for any `*.syso` present next to
-`main.go`:
+`build\build.cmd` is the single entry point for building — it asks for a
+target (`windows`, `linux` or `docker`) and builds accordingly. It never
+hardcodes where the output should go: that's read from `build\build.env`
+(gitignored — copy `build\build.env.template` to `build\build.env` first
+and fill in your own local paths; without it, the build still runs, the
+output just stays in the project folder instead of being copied anywhere).
+
+```
+build\build.cmd
+```
+
+**"linux" vs "docker" — these answer different questions, not "which OS":**
+"linux" builds the plain binary that gets *deployed* (shipped to a real
+server and run there — see "Deploying to a server" below; that server
+happens to run it inside a Docker container too, via a generic runtime
+image, but building the binary itself has nothing Docker-specific about
+it). "docker" is for *local* testing on this machine via Docker Desktop
+(`docker compose up`) and optionally pushing an image to Docker Hub — it
+never touches the remote server at all. In short: need to ship a new
+version to the server → `linux`. Want to test in a container on your own
+PC, or publish an image → `docker`.
+
+**Target: windows** — `go build -ldflags "-H=windowsgui -s -w" -o contacts.exe .`
+(`-H=windowsgui`: no console window pops up, just the browser; `-s -w`:
+strips debug info). Copies `contacts.exe` to `WINDOWS_DEPLOY_DIR` if set in
+`build.env`.
+
+**Target: linux** — `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ...`,
+producing a static `contacts` binary (no C compiler needed, `modernc.org/sqlite`
+is pure Go). Copies it to `LINUX_DEPLOY_DIR` if set — that's the folder a
+separately maintained deploy script picks up and ships to the server (see
+"Deploying to a server" below).
+
+**Target: docker** — builds the local `contacts:latest` image
+(`docker build -t contacts:latest .`, using the `Dockerfile` at the repo
+root) for testing with `docker compose up` (see below), then asks whether
+to also push it to Docker Hub. If yes, and `DOCKERHUB_IMAGE` is set in
+`build.env` (e.g. `yourusername/contacts`), it tags and pushes
+`DOCKERHUB_IMAGE:latest` — run `docker login` first if you haven't. This
+target doesn't produce or copy anything a deploy script would use; it's
+purely for local testing and/or publishing an image.
+
+**Icon** (optional, one-time, Windows target only): `icon.ico` is already
+in this folder; Go itself can't embed a Windows exe icon, so a small,
+pure-Go helper tool writes it into a `.syso` resource file that `go build`
+then links in automatically:
 
 ```
 go install github.com/akavel/rsrc@latest
-rsrc -ico icon.ico -o rsrc.syso
+rsrc -ico icon.ico -o rsrc_windows_amd64.syso
 ```
 
 Do this once (needs internet, to fetch the tool); re-run just the `rsrc`
 line if you ever replace `icon.ico` with a different image. Keep the
-resulting `rsrc.syso` in this folder (check it into version control if you
-use any) so future builds keep the icon without repeating this step.
+resulting `rsrc_windows_amd64.syso` in this folder (checked into version
+control) so future builds keep the icon without repeating this step. The
+`_windows_amd64` suffix isn't cosmetic — Go only links a
+`*_windows_amd64.syso` file into windows/amd64 builds, so it's
+automatically skipped by the linux/docker targets instead of breaking
+cross-compilation.
+
+**Running the Windows build**: double-click `contacts.exe` (or run it from
+a terminal). It opens your browser to http://localhost:8080 automatically.
+Running it again while it's already open just re-opens the browser instead
+of failing to start. Because everything (HTML templates included, via
+`go:embed`) is baked into the single `.exe`, and the SQLite driver is pure
+Go (no C compiler, no extra DLLs needed at runtime), deploying to another
+Windows PC is just: copy `contacts.exe` (and `data/`, if you want to bring
+existing data) to any folder on the other PC, then double-click it. No Go
+installation, no `templates/` folder, no installer needed on the target
+machine.
+
+## 5. Deploy with Docker (local build + run)
+
+The same codebase also builds and runs as a Linux container — no code
+changes needed between the two, since `main.go` detects the OS at runtime
+(`runtime.GOOS`) and adjusts behavior accordingly (no tray icon, no
+auto-opened browser, binds to `0.0.0.0` instead of `127.0.0.1` by default,
+listens for `SIGTERM`/`SIGINT` for a graceful `docker stop`).
 
 ```
-go build -ldflags "-H=windowsgui -s -w" -o contacts.exe .
+docker compose up -d --build
 ```
 
-- `-H=windowsgui` marks the exe as a GUI app: no black console window pops
-  up when you double-click it, just the browser. (Leave this flag off if
-  you want the console back for debugging — `go build -o contacts.exe .`.)
-- `-s -w` strips debug info, just to keep the file smaller. Optional.
-- If `rsrc.syso` is present, this same command also gives `contacts.exe`
-  its icon — no extra flags needed, `go build` picks it up on its own.
+This builds the image from the included `Dockerfile` (multi-stage: compiles
+a static Linux binary with `CGO_ENABLED=0`, then copies just that binary
+into a `scratch` runtime image — no Go, no shell, no package manager in the
+final image) and starts it per `docker-compose.yml`: port `8080` on the
+host mapped to `8080` in the container, and `./data` on the host
+bind-mounted to `/app/data` in the container — the exact same folder the
+Windows exe uses, so a `data/` folder copied from one deployment to the
+other just works.
 
-Double-click `contacts.exe` (or run it from a terminal, that still works
-fine). It opens your browser to http://localhost:8080 automatically. If
-you run it again while it's already open, it just re-opens the browser
-instead of failing to start.
+Without compose:
 
-Because everything (HTML templates included, via `go:embed`) is baked
-into the single `.exe`, and the SQLite driver is pure Go (no C compiler,
-no extra DLLs needed at runtime), deploying to another Windows PC is just:
+```
+docker build -t contacts:latest .
+docker run -d --name contacts -p 8080:8080 -v ./data:/app/data --restart unless-stopped contacts:latest
+```
 
-1. Copy `contacts.exe` (and `contacts.db`, if you want to bring existing
-   data) to any folder on the other PC.
-2. Double-click `contacts.exe`.
+**Configuration**, both via environment variables (see `docker-compose.yml`
+to set these permanently) and `data/appsettings.json` (works identically to
+the Windows exe — the `"port"` field, see "Poort wijzigen" above):
+- `CONTACTS_LISTEN_HOST` — overrides the listen address inside the
+  container (default `0.0.0.0`, i.e. reachable from outside the container).
+  Only worth setting to something else if you're putting a reverse proxy on
+  the same Docker network and want to restrict it.
+- `TZ` — defaults to `Europe/Brussels` in the provided `Dockerfile`
+  (`scratch` has no timezone database of its own, so this matters for
+  correct local timestamps in `contacts.log` and backup filenames). Override
+  if you're deploying somewhere else.
 
-No Go installation, no `templates/` folder, no installer needed on the
-target machine. The database file is created next to `contacts.exe`
-automatically on first run if it doesn't already exist there.
+**Not applicable in the container** (Windows-only, silently skipped): the
+systray icon, auto-opening a browser, the "already running, just re-open
+the browser" double-launch check, and the nav menu's "Afsluiten" button
+(with `/shutdown` itself also rejecting the request server-side, in case
+something posts to it directly) — none of these make sense for a headless
+container (a self-inflicted shutdown would just have `restart: always`
+relaunch it immediately), so `main.go` skips them there and just runs as a
+plain foreground server until it receives a stop signal (`SIGTERM`/`SIGINT`).
+
+### Deploying to a server (e.g. via Dockhand)
+
+Some production setups don't build/push a custom image at all — instead a
+generic, unmodified runtime image gets the actual application bind-mounted
+in from the host and started via an explicit `command:` (the same pattern
+many `dotnet publish`-based stacks use: a stock runtime image + published
+app folder). `docker-compose.prod.yml` is that style of stack definition
+for Contacts — kept here purely as a version-controlled **reference copy**;
+Dockhand itself isn't pointed at this file, its stack config is entered by
+pasting this YAML into the Dockhand UI. Update both together when they need
+to change (e.g. a new port or image tag):
+
+```yaml
+name: contacts-prod
+services:
+  contacts:
+    image: gcr.io/distroless/static-debian12
+    container_name: contacts-prod
+    restart: always
+    ports:
+      - 8080:8080
+    working_dir: /app
+    volumes:
+      - /path/to/contacts-prod/app:/app
+    command: ["/app/contacts"]
+    environment:
+      - TZ=Europe/Brussels
+```
+
+(Placeholders — fill in your own host port/path; see `docker-compose.prod.yml`
+for the same content with more detail in the comments.)
+
+One flat host folder holds the binary. `contacts.db`/`appsettings.json`/
+`contacts.log` end up in `app/data/` — the app's own `dataDir`, always
+resolved relative to its own binary (see `main.go`). That subfolder must be
+protected from being overwritten at the **deploy-script** level (not via
+Docker) — whatever ships the binary to the server needs a rule like rsync's
+`--filter=P /data/***` so its `--delete` never touches `app/data/`,
+otherwise a deploy would wipe the database.
+
+The Go equivalent of ".NET runtime image + published dotnet output" is "a
+base image with just tzdata/ca-certificates + a statically-linked Go
+binary" — `gcr.io/distroless/static-debian12` fits that role (~1.9MB,
+includes tzdata and ca-certificates, no shell/package manager needed since
+`CGO_ENABLED=0` gives the binary zero runtime dependencies of its own).
+
+**Building** the deployable artifact: `build\build.cmd` (target: `linux` —
+*not* `docker`, see "Build & deploy" above for why) stages the linux/amd64
+binary at whatever local folder `build.env`'s `LINUX_DEPLOY_DIR` points to.
+
+**Deploying**: intentionally *not* part of this repository — which server,
+which paths, SSH targets and so on are infrastructure details, not
+application source. A deploy script (rsync-based, or whatever fits your
+infrastructure) should: read the binary from `LINUX_DEPLOY_DIR`, protect
+the remote `app/data/` folder from deletion/overwrite as described above,
+ship the binary, mark it executable, restart the container, and ideally
+keep a backup of the previous version. Pick whatever host port is free on
+the target host for the left-hand side of `ports:`; the container-side
+port must stay `8080`. No `CONTACTS_LISTEN_HOST` override is needed —
+`main.go` already defaults to `0.0.0.0` on Linux.
+
+The `Dockerfile`/`docker-compose.yml`/`.dockerignore` at the repo root are
+for **local** build-and-run only (`docker compose up -d --build`, see
+above) — not used by this production path.
 
 ## What it does
 
@@ -114,10 +255,22 @@ automatically on first run if it doesn't already exist there.
   constante en voeg een `case` toe in `ensureSchemaVersion`'s `switch`
   wanneer een toekomstige wijziging aan `db.go` bestaande databases echt moet
   migreren.
+- **Datamap (`./data`)**: `appsettings.json`, het standaard `contacts.db` en
+  `contacts.log` leven allemaal in een `data`-submap naast `contacts.exe`
+  (`exeDir/data`, aangemaakt bij opstart als hij nog niet bestaat) — dezelfde
+  map die bij een Docker-deploy als volume gemount wordt (zie "Deploy with
+  Docker" verderop), zodat de exe en de container zich identiek gedragen.
+  Stond je vorige installatie nog met deze bestanden rechtstreeks naast
+  `contacts.exe` (van vóór deze wijziging)? Bij de eerste opstart na de
+  update verplaatst `migrateLegacyDataFiles` (`migrate.go`) ze automatisch
+  naar `data/` — stil, eenmalig, en enkel als ze nog op die oude
+  standaardlocatie stonden. Een database die je zelf via de kiezer naar een
+  ander pad (bv. een netwerkschijf) hebt gestuurd, wordt hierbij nooit
+  aangeraakt.
 - **Database kiezen** (modal op de startpagina, knop "Database wisselen"): bij
   het opstarten wordt automatisch het laatst gebruikte databasepad geopend,
-  onthouden in `appsettings.json` (naast `contacts.exe`, veld
-  `last_db_path`) — standaard `contacts.db` naast de exe als er nog geen
+  onthouden in `appsettings.json` (in `data/`, veld
+  `last_db_path`) — standaard `data/contacts.db` als er nog geen
   instellingenbestand is. De eerste keer dat `/home` laadt in een sessie
   verschijnt automatisch een modal met dat pad, met drie knoppen: **"Wisselen"**
   opent een bestaand databasebestand op het ingevoerde pad; **"Nieuwe database
@@ -147,14 +300,14 @@ automatically on first run if it doesn't already exist there.
     (bv. een NAS die offline is bij de volgende opstart) faalt het opstarten
     zelf met een Windows-foutvenstertje, nog vóór de webserver (en dus de
     database-kiezer) beschikbaar is. Los je dat op door `appsettings.json`
-    naast `contacts.exe` te verwijderen of het `last_db_path`-veld erin leeg
-    te maken — de app valt dan terug op het standaardpad (`contacts.db`
-    naast de exe) en je kan de netwerklocatie via de modal opnieuw proberen
-    zodra ze weer bereikbaar is.
+    (in `data/`) te verwijderen of het `last_db_path`-veld erin leeg te
+    maken — de app valt dan terug op het standaardpad (`data/contacts.db`)
+    en je kan de netwerklocatie via de modal opnieuw proberen zodra ze weer
+    bereikbaar is.
 - **Poort wijzigen**: Contacts luistert standaard op poort 8080
   (`http://127.0.0.1:8080`). Is die op een bepaalde pc al in gebruik door
-  iets anders, voeg dan een `"port"`-veld toe aan `appsettings.json` (naast
-  `contacts.exe` — maak het bestand aan als het nog niet bestaat) en herstart
+  iets anders, voeg dan een `"port"`-veld toe aan `appsettings.json` (in
+  `data/` — maak het bestand aan als het nog niet bestaat) en herstart
   Contacts:
   ```json
   { "port": 9090 }
@@ -167,11 +320,13 @@ automatically on first run if it doesn't already exist there.
   latere acties zoals database wisselen.
   - `appsettings.json` zelf staat in `.gitignore` (het is per-installatie,
     kan een lokaal databasepad/poort bevatten die niet bij iedereen past) —
-    `appsettings.json.template` staat wel in de repo als voorbeeld/startpunt.
+    `appsettings.json.template` staat wel in de repo als voorbeeld/startpunt;
+    kopieer het naar `data/appsettings.json` en pas het aan als je met een
+    kant-en-klaar startpunt wil beginnen in plaats van de standaardwaarden.
     De app werkt trouwens ook prima zonder dat je dit bestand ooit aanmaakt:
     ontbreekt het, dan gebruikt Contacts gewoon de standaardwaarden
-    (`contacts.db` naast de exe, poort 8080) en maakt het bestand vanzelf aan
-    zodra je iets wisselt.
+    (`data/contacts.db`, poort 8080) en maakt het bestand vanzelf aan zodra
+    je iets wisselt.
 - **Back-up maken** (knop naast "Database wisselen" op de startpagina, POST
   `/backup-db`, `backup.go`): maakt meteen een kopie van de actieve database
   naast het origineel, met dezelfde naam plus een tijdstip erin, bv.
@@ -409,10 +564,9 @@ automatically on first run if it doesn't already exist there.
   - **Waar leven de logs?** Op twee plekken tegelijk. `logRing` (`logs.go`)
     is een in-memory ringbuffer die enkel de laatste 500 regels bijhoudt —
     dat vult de in-app **Logs**-pagina. Daarnaast schrijft `filelog.go` elke
-    log-regel ook naar **`contacts.log`** naast `contacts.exe` (niet in
-    `contacts.db` — dat blijft puur contactgegevens). Beide krijgen exact
-    dezelfde regels, via één `log.SetOutput(io.MultiWriter(...))` in
-    `main.go`.
+    log-regel ook naar **`contacts.log`** in `data/` (niet in `contacts.db`
+    — dat blijft puur contactgegevens). Beide krijgen exact dezelfde regels,
+    via één `log.SetOutput(io.MultiWriter(...))` in `main.go`.
   - **Bugfix**: beide bleven aanvankelijk helemaal leeg, ook al werkte de rest
     van de app prima. Oorzaak: `io.MultiWriter` stopt bij de eerste writer
     die een fout teruggeeft en slaat alle volgende writers in de lijst dan
@@ -476,13 +630,16 @@ automatically on first run if it doesn't already exist there.
 ## Project layout
 
 ```
-main.go              entry point: embed, routing, browser auto-open,
-                     already-running check, startup error handling,
-                     systray icon + message loop, shutdown
+main.go              entry point: embed, dataDir resolution, routing,
+                     listen host + SIGTERM/SIGINT handling, startup error
+                     handling; Windows-only (isDesktop): browser auto-open,
+                     already-running check, systray icon + message loop
 icon.png              systray-icoon (placeholder, PNG, ingebakken via go:embed)
 version.go              AppVersion + CurrentSchemaVersion constanten (hier
                        met de hand aanpassen om te versiebeheren)
 appsettings.go          appsettings.json laden/opslaan (last_db_path, port)
+migrate.go              eenmalige migratie van root-level contacts.db/
+                       appsettings.json naar data/ (oude standaardlocatie)
 dbchooser.go            POST /choose-db handler (database live wisselen)
 backup.go               POST /backup-db handler (back-up via VACUUM INTO)
 db.go                SQLite connection, schema, migration, all queries,
@@ -545,6 +702,38 @@ All templates are embedded into the binary at build time via `go:embed`
 (`main.go`) — the `templates/` folder only needs to exist at build time,
 not alongside the running exe.
 
+Docker-related files (not needed for the Windows exe build, only for
+`docker compose up`, see "Deploy with Docker" above):
+
+```
+Dockerfile              multi-stage build: static Linux binary -> scratch image
+.dockerignore           keeps data/, .git, build artifacts out of the build context
+docker-compose.yml      local build + run (port mapping + ./data volume mount)
+docker-compose.prod.yml reference copy of the Dockhand stack config (pasted
+                       into the Dockhand UI, not read from this file
+                       automatically) -- see "Deploying to a server" above
+rsrc_windows_amd64.syso Windows-only exe icon resource -- the _windows_amd64
+                       suffix means Go only links it into windows/amd64
+                       builds, so the Docker/Linux build ignores it
+```
+
+Build tooling (see "Build & deploy" above):
+
+```
+build/
+  build.cmd              single entry point for building -- prompts for a
+                        target (windows/linux/docker), builds accordingly
+  build.env.template      documents the expected build.env format, committed
+  build.env               your own local build-output paths -- gitignored,
+                        never committed (copy build.env.template to create it)
+```
+
+Deploy scripts (rsync/backup/restart to a remote server, or whatever fits
+your infrastructure) are deliberately **not** part of this repository --
+they contain environment-specific details (hostnames, remote paths) that
+don't belong in application source. See "Deploying to a server" above for
+what such a script needs to do.
+
 ## Known limitations
 
 - Validation is minimal (only first/last name are required, enforced by
@@ -604,15 +793,19 @@ not alongside the running exe.
   ("België") against the real setting, so it correctly renders blank
   there unless you've changed the home country in Instellingen — that's
   intentional, not a bug, but can look inconsistent at first glance.
-- The app binds only to `127.0.0.1` (localhost), not your network IP — by
-  design, so it's not reachable from other devices on your network. If you
-  ever want that, it's a one-line change (`listenAddr` in `main.go`), but
-  think about the lack of authentication first.
-- The "already running?" check is a plain HTTP GET to `/contacts` on
-  localhost — good enough to avoid a confusing port-already-in-use error
-  when you double-click the exe twice, but it can't tell the difference
-  between "our own instance" and some unrelated thing that happens to
-  answer on that port. Not a concern in practice on a normal PC.
+- On Windows, the app binds only to `127.0.0.1` (localhost), not your
+  network IP — by design, so it's not reachable from other devices on your
+  network. In the Docker deployment it binds to `0.0.0.0` by default instead
+  (see "Deploy with Docker"), since a container is meaningless if nothing
+  outside it can reach the service; both are overridable via the
+  `CONTACTS_LISTEN_HOST` environment variable. Either way, think about the
+  lack of authentication before exposing this beyond your own machine.
+- The "already running?" check (a plain HTTP GET to `/contacts` on
+  localhost, good enough to avoid a confusing port-already-in-use error when
+  you double-click the exe twice) — along with the systray icon and
+  auto-opening a browser — only runs on Windows (`runtime.GOOS == "windows"`
+  in `main.go`). None of the three make sense for a headless Docker
+  container, which just runs as a plain foreground server instead.
 - With `-H=windowsgui`, a crash or fatal error *before* the web server
   starts (e.g. the database file can't be created) shows a native Windows
   message box, since there's no console and no Logs page yet at that

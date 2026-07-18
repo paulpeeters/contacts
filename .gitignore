@@ -1,5 +1,10 @@
 # Runtime data -- generated on first run / during use, never something to
 # commit (this is a single-user local app; every install has its own).
+# ./data is where all of this actually lives now (contacts.db,
+# appsettings.json, contacts.log); the root-level patterns below are kept
+# too since older installs (pre-migration) may still have files there
+# briefly before the automatic migration into ./data runs.
+/data/
 /contacts.db
 /contacts.db-journal
 /contacts.db-wal
@@ -12,3 +17,6 @@
 # Build artifacts
 /contacts.exe
 /contacts
+
+# Local, machine-specific build output paths -- see build/build.env.template
+/build/build.env

@@ -1,1 +1,0 @@
-go build -ldflags "-H=windowsgui -s -w" -o contacts.exe . 
