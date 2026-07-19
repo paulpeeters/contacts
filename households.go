@@ -13,7 +13,12 @@ func handleHouseholdList(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	render(w, "household_list", rows)
+	tags, err := listDistinctContactTags(db)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	render(w, "household_list", householdListData{Households: rows, AllTags: tags})
 }
 
 func handleHouseholdNewForm(w http.ResponseWriter, r *http.Request) {
@@ -80,8 +85,18 @@ func handleHouseholdUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("Huishouden bijgewerkt: %s (ID %d)", h.Label, h.ID)
-	w.Header().Set("HX-Redirect", "/households")
+	w.Header().Set("HX-Redirect", householdsRedirectURL(h.ID))
 	w.WriteHeader(http.StatusOK)
+}
+
+// householdsRedirectURL is contactsRedirectURL's twin for /households (see
+// handlers.go) -- scrollTo=<id> only, the filter itself lives in
+// sessionStorage client-side (see household_list.html). Used only after an
+// update (handleHouseholdCreate keeps redirecting to the new household's own
+// edit page, not the list, since adding members right away is the normal
+// next step there).
+func householdsRedirectURL(id int64) string {
+	return "/households?scrollTo=" + strconv.FormatInt(id, 10)
 }
 
 func handleHouseholdDelete(w http.ResponseWriter, r *http.Request) {

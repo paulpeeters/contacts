@@ -185,7 +185,15 @@ func labelFilterFromForm(r *http.Request) (LabelFilter, error) {
 		f.PrintMode = "contact"
 	}
 	f.SearchTerm = strings.TrimSpace(r.FormValue("search_term"))
-	f.Tags = strings.Join(r.PostForm["tags[]"], ",")
+	// tags_state/tags_mode are hidden fields the tri-state tag buttons on
+	// label_filter_form.html keep in sync client-side (see that template's
+	// updateTagsHiddenFields) -- see LabelFilter.Tags's doc comment for the
+	// "tag:state|tag:state" format.
+	f.Tags = r.FormValue("tags_state")
+	f.TagsMode = r.FormValue("tags_mode")
+	if f.TagsMode != "or" {
+		f.TagsMode = "and"
+	}
 
 	return f, nil
 }

@@ -1,10 +1,10 @@
-{{define "household_list"}}
+{{define "contacts_list"}}
 <!DOCTYPE html>
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Huishoudens</title>
+<title>Contacts</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 <style>
@@ -16,29 +16,37 @@
 {{template "nav"}}
 <main class="container">
   <hgroup>
-    <h1>Huishoudens</h1>
-    <h2><span id="f-shown-count">{{len .Households}}</span> / {{len .Households}} huishouden(s)</h2>
+    <h1>Contacts</h1>
+    <h2><span id="f-shown-count">{{len .Contacts}}</span> / {{len .Contacts}} contact(en)</h2>
   </hgroup>
 
-  <p>
-    Een huishouden bundelt het gedeelde adres, telefoon en e-mailadres van een gezin of koppel, plus de
-    aanhef die op het etiket komt (bv. "Familie Peeters-Janssens"). Elk contact hoort bij precies één huishouden.
-  </p>
+  {{if .ShowSyncSummary}}
+  <article>
+    Sync voltooid: contacten <strong>{{.ContactsCreated}}</strong> nieuw / <strong>{{.ContactsUpdated}}</strong> bijgewerkt,
+    huishoudens <strong>{{.HouseholdsCreated}}</strong> nieuw / <strong>{{.HouseholdsUpdated}}</strong> bijgewerkt.
+  </article>
+  {{end}}
 
-  <p><a href="/households/new" role="button">+ Huishouden toevoegen</a></p>
+  <p>
+    <a href="/contacts/new" role="button">+ Contact toevoegen</a>
+    <button type="button" class="secondary outline"
+            onclick="appConfirm('Contacten exporteren naar Excel?', function () { window.location.href = '/contacts/export'; })">Exporteren naar Excel</button>
+    <a href="/contacts/sync" role="button" class="secondary outline">Synchroniseren vanuit Excel</a>
+    <a href="/households" role="button" class="secondary outline">Huishoudens</a>
+    <a href="/label-filters" role="button" class="secondary outline">Etiketten afdrukken</a>
+  </p>
 
   <details id="filter-panel">
     <summary role="button" class="secondary outline">Filteren</summary>
-    <p><small>Voornaam/naam/e-mail/geboortejaar/tags matchen als <strong>minstens één lid</strong> van het huishouden voldoet; adres en gemeente gelden voor het huishouden zelf.</small></p>
     <div class="grid">
-      <label>Voornaam (lid) bevat <input type="text" id="f-fn"></label>
-      <label>Naam (lid) bevat <input type="text" id="f-ln"></label>
-      <label>E-mail (lid) bevat <input type="text" id="f-em"></label>
+      <label>Voornaam bevat <input type="text" id="f-fn"></label>
+      <label>Naam bevat <input type="text" id="f-ln"></label>
+      <label>E-mail bevat <input type="text" id="f-em"></label>
     </div>
     <div class="grid">
       <label>Adres bevat <input type="text" id="f-ad"></label>
       <label>Gemeente bevat <input type="text" id="f-ci"></label>
-      <label>Geboortejaar (lid)
+      <label>Geboortejaar
         <div style="display:flex; gap:0.5rem;">
           <select id="f-yop" style="max-width:5rem;">
             <option value="">-</option>
@@ -52,7 +60,7 @@
     </div>
 
     {{if .AllTags}}
-    <p style="margin-bottom:0.25rem;"><strong>Tags (lid)</strong> <small>(klik: neutraal &rarr; bevat &rarr; bevat niet &rarr; neutraal)</small></p>
+    <p style="margin-bottom:0.25rem;"><strong>Tags</strong> <small>(klik: neutraal &rarr; bevat &rarr; bevat niet &rarr; neutraal)</small></p>
     <div class="tag-filter-list" id="tag-filter-list">
       {{range .AllTags}}
       <button type="button" class="tag-tristate outline secondary" data-tag="{{.}}" data-state="0">{{.}}</button>
@@ -71,41 +79,46 @@
 
   <table>
     <thead>
-      <tr><th>Aanhef (label)</th><th>Adres</th><th>Stad</th><th>Leden</th><th></th></tr>
+      <tr><th>Naam</th><th>Huishouden</th><th>Stad</th><th>Mobiel</th><th>E-mail</th><th>Tags</th><th></th></tr>
     </thead>
-    <tbody id="households-body">
-      {{range .Households}}
-      <tr id="household-{{.ID}}" data-address="{{.Address}}" data-city="{{.City}}" data-members='{{.MembersJSON}}'>
-        <td><a href="/households/{{.ID}}/edit">{{.Label}}</a></td>
-        <td>{{.Address}}</td>
+    <tbody id="contacts-body">
+      {{range .Contacts}}
+      <tr id="contact-{{.ID}}"
+          data-firstname="{{.FirstName}}" data-lastname="{{.LastName}}" data-email="{{.Email}}"
+          data-address="{{.Address}}" data-city="{{.City}}" data-birthyear="{{.BirthYear}}" data-tags="{{.Tags}}">
+        <td><a href="/contacts/{{.ID}}/edit">{{.FirstName}} {{.LastName}}</a></td>
+        <td><a href="/households/{{.HouseholdID}}/edit">{{.HouseholdLabel}}</a></td>
         <td>{{.City}}</td>
-        <td>
-          {{range $i, $m := .Members}}{{if $i}}, {{end}}<a href="/contacts/{{$m.ID}}/edit">{{$m.FirstName}} {{$m.LastName}}</a>{{else}}<em>geen leden</em>{{end}}
-        </td>
+        <td>{{.Mobile}}</td>
+        <td>{{.Email}}</td>
+        <td>{{.Tags}}</td>
         <td>
           <button class="secondary outline"
-                  hx-delete="/households/{{.ID}}"
-                  hx-target="#household-{{.ID}}"
+                  hx-delete="/contacts/{{.ID}}"
+                  hx-target="#contact-{{.ID}}"
                   hx-swap="outerHTML"
-                  hx-confirm="Huishouden '{{.Label}}' verwijderen?">Verwijder</button>
+                  hx-confirm="{{.FirstName}} {{.LastName}} verwijderen?">Verwijderen</button>
         </td>
       </tr>
       {{else}}
-      <tr><td colspan="5">Nog geen huishoudens. <a href="/households/new">Maak er één aan</a>.</td></tr>
+      <tr><td colspan="7">Nog geen contacten. <a href="/contacts/new">Voeg je eerste contact toe</a>.</td></tr>
       {{end}}
     </tbody>
   </table>
 
   <script>
     (function () {
-      var body = document.getElementById('households-body');
+      var body = document.getElementById('contacts-body');
       if (!body) return;
 
-      // Filter state lives in sessionStorage rather than the URL -- see
-      // contacts_list.html's identical mechanism for the reasoning. Separate
-      // storage key from the contacts page, since this page has its own
-      // filter fields.
-      var STORAGE_KEY = 'householdsFilter';
+      // Filter state lives in sessionStorage rather than the URL: it needs
+      // to survive every path back to this list (Opslaan, Annuleren,
+      // clicking "Contacten" in the nav, the browser back button, ...)
+      // without every one of those having to know about and forward a
+      // query string. sessionStorage is cleared when the browser/tab
+      // session ends, which is exactly the "active for this session only"
+      // behavior we want -- no expiry bookkeeping needed, unlike a cookie.
+      var STORAGE_KEY = 'contactsFilter';
 
       function saveFilterState(f) {
         try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(f)); } catch (e) { /* storage unavailable -- filter still works this page load */ }
@@ -133,12 +146,9 @@
         return !needle || (haystack || '').toLowerCase().indexOf(needle.toLowerCase()) !== -1;
       }
 
-      // Does one household member (fn/ln/em/tags/yr) satisfy every active
-      // text/year condition plus the tag EN/OF group? Mirrors
-      // contacts_list.html's identically-named helper -- kept as a separate
-      // copy here rather than shared, since this page has no member "row" of
-      // its own to attach it to (see applyFilter below, which calls this
-      // once per member via the data-members JSON).
+      // Shared by household_list.html's per-member matching: given the
+      // current filter state f and one "person" worth of fields, does it
+      // satisfy every active text/year condition plus the tag EN/OF group?
       function rowMatchesPersonal(f, fn, ln, em, tags, yr) {
         if (!containsCI(fn, f.fn)) return false;
         if (!containsCI(ln, f.ln)) return false;
@@ -185,18 +195,12 @@
 
       function applyFilter() {
         var f = currentFilterState();
-        var personalActive = !!(f.fn || f.ln || f.em || (f.yop && f.yv) || f.tags.length);
         var shown = 0;
         body.querySelectorAll('tr').forEach(function (row) {
-          if (row.dataset.address === undefined) return; // "geen huishoudens" placeholder row
+          if (row.dataset.firstname === undefined) return; // "geen contacten" placeholder row
           if (!containsCI(row.dataset.address, f.ad)) { row.style.display = 'none'; return; }
           if (!containsCI(row.dataset.city, f.ci)) { row.style.display = 'none'; return; }
-          var ok = true;
-          if (personalActive) {
-            var members = [];
-            try { members = JSON.parse(row.dataset.members || '[]'); } catch (e) { members = []; }
-            ok = members.some(function (m) { return rowMatchesPersonal(f, m.fn, m.ln, m.em, m.tags, m.yr); });
-          }
+          var ok = rowMatchesPersonal(f, row.dataset.firstname, row.dataset.lastname, row.dataset.email, row.dataset.tags, row.dataset.birthyear);
           row.style.display = ok ? '' : 'none';
           if (ok) shown++;
         });
@@ -229,14 +233,14 @@
         if (panel && hasAnyFilter(saved)) panel.open = true;
       }
 
-      // scrollTo is a one-time signal from the server (see
-      // householdsRedirectURL in households.go), not persistent filter
-      // state, so it stays a URL param -- stripped right after use.
+      // scrollTo is a one-time signal from the server (see contactsRedirectURL
+      // in handlers.go), not persistent filter state, so it stays a URL param
+      // -- it's stripped right after use so a page refresh doesn't re-scroll.
       function scrollToRowIfNeeded() {
         var params = new URLSearchParams(window.location.search);
         var id = params.get('scrollTo');
         if (id) {
-          var row = document.getElementById('household-' + id);
+          var row = document.getElementById('contact-' + id);
           if (row) row.scrollIntoView({ block: 'center' });
         }
         if (params.has('scrollTo')) {

@@ -1,5 +1,7 @@
 package main
 
+import "encoding/json"
+
 // Contact is a single row in the contacts table: one person. Shared
 // household data (address, common phone/email, card salutation) lives on
 // Household instead -- see HouseholdID.
@@ -16,6 +18,17 @@ type Contact struct {
 	LastVerifiedOn string // ISO date, yyyy-mm-dd
 	CreatedAt      string
 	UpdatedAt      string
+}
+
+// BirthYear returns just the year portion of Birthdate (empty if unset or
+// too short to contain one) -- used by the /contacts and /households list
+// filters to match a birth-year comparison (<, =, >) against yyyy-mm-dd
+// dates.
+func (c Contact) BirthYear() string {
+	if len(c.Birthdate) < 4 {
+		return ""
+	}
+	return c.Birthdate[:4]
 }
 
 // Household groups one or more contacts who share a mailing address (e.g.
@@ -42,6 +55,7 @@ type ContactListRow struct {
 	Contact
 	HouseholdLabel string
 	City           string
+	Address        string
 }
 
 // householdListRow is a Household plus its current members, for the
@@ -49,6 +63,36 @@ type ContactListRow struct {
 type householdListRow struct {
 	Household
 	Members []Contact
+}
+
+// memberFilterJSON is the shape MembersJSON emits per member -- deliberately
+// short field names since this is embedded, one per member, directly into a
+// data-members="..." HTML attribute on household_list.html and parsed back
+// out client-side by the filter JS there.
+type memberFilterJSON struct {
+	FN   string `json:"fn"`
+	LN   string `json:"ln"`
+	Em   string `json:"em"`
+	Tags string `json:"tags"`
+	Yr   string `json:"yr"`
+}
+
+// MembersJSON returns this household's members (first/last name, personal
+// email, tags, birth year) as a compact JSON array. household_list.html's
+// filter needs to check "does at least one member match these personal-field
+// criteria" -- rather than threading that logic through Go, the member data
+// travels to the client as JSON and the matching happens there, reusing the
+// same per-field match functions the /contacts page already has.
+func (r householdListRow) MembersJSON() string {
+	items := make([]memberFilterJSON, 0, len(r.Members))
+	for _, m := range r.Members {
+		items = append(items, memberFilterJSON{FN: m.FirstName, LN: m.LastName, Em: m.Email, Tags: m.Tags, Yr: m.BirthYear()})
+	}
+	b, err := json.Marshal(items)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
 }
 
 // householdFormData is what the household add/edit template renders.
@@ -69,14 +113,24 @@ type formData struct {
 	AllTags    []string
 }
 
-// indexData is what the contact list template renders.
-type indexData struct {
+// contactsListData is what the contacts_list template renders. AllTags is
+// every distinct tag already used by any contact, offered as the filter
+// panel's tag picker.
+type contactsListData struct {
 	Contacts          []ContactListRow
+	AllTags           []string
 	ShowSyncSummary   bool
 	ContactsCreated   int
 	ContactsUpdated   int
 	HouseholdsCreated int
 	HouseholdsUpdated int
+}
+
+// householdListData is what the households list template renders. AllTags
+// mirrors contactsListData.AllTags, for the same tag-filter picker on this page.
+type householdListData struct {
+	Households []householdListRow
+	AllTags    []string
 }
 
 // settingsData is what the settings page renders.
@@ -219,9 +273,16 @@ type LabelFilter struct {
 	ContentID  int64
 	PrintMode  string // "contact" or "household"
 	SearchTerm string
-	Tags       string // comma-separated, pre-checked tag filters
-	CreatedAt  string
-	UpdatedAt  string
+	// Tags holds the tri-state tag filter from label_filter_form.html, as
+	// "tag:state|tag:state" pairs (state 1 = must-have, 2 = must-not-have) --
+	// entirely opaque to Go, parsed/built client-side (see that template's
+	// parseSavedTags). A tag with no ":state" suffix (the plain
+	// comma-separated format this column used before tri-state existed) is
+	// treated as state 1, so old saved filters still restore correctly.
+	Tags      string
+	TagsMode  string // "and" or "or" -- how the Tags conditions combine
+	CreatedAt string
+	UpdatedAt string
 }
 
 // labelSheetFormData is what the label sheet add/edit template renders.

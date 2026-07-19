@@ -185,17 +185,27 @@ func main() {
 	// default if there's no settings file yet.
 	currentDBPath = settings.LastDBPath
 	dbPathSource := "laatst gebruikt pad (appsettings.json)"
-	switch currentDBPath {
-	case "":
+	switch {
+	case currentDBPath == "":
 		currentDBPath = filepath.Join(dataDir, "contacts.db")
 		dbPathSource = "standaardpad (geen appsettings.json gevonden)"
-	case "contacts.db":
-		// A bare relative filename (e.g. hand-typed into appsettings.json)
-		// would otherwise resolve against the process's working directory,
-		// which isn't reliably exeDir/dataDir depending on how the exe was
-		// launched. Treat it as shorthand for the default location instead.
+	case currentDBPath == "contacts.db":
+		// Legacy shorthand from before ./data existed -- back then this
+		// literally meant "next to the exe". That default has since moved
+		// into dataDir, so translate it there instead of resolving it
+		// literally (which would incorrectly point at the exe's own
+		// folder, the OLD default location).
 		currentDBPath = filepath.Join(dataDir, "contacts.db")
 		dbPathSource = "standaardpad (relatief pad in appsettings.json)"
+	case !filepath.IsAbs(currentDBPath):
+		// Any other relative path (e.g. "data/contacts.db", hand-typed
+		// into appsettings.json) would otherwise resolve against the
+		// process's working directory, which isn't reliably exeDir
+		// depending on how the exe was launched. Resolve it relative to
+		// exeDir instead -- the natural base for a relative path in this
+		// file, and what "data/contacts.db" is clearly meant to say.
+		currentDBPath = filepath.Join(exeDir, currentDBPath)
+		dbPathSource = "relatief pad in appsettings.json (opgelost t.o.v. programmamap)"
 	}
 	log.Printf("Databasepad: %s (%s)", currentDBPath, dbPathSource)
 

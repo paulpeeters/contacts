@@ -179,9 +179,14 @@ CREATE TABLE IF NOT EXISTS label_filters (
 	print_mode          TEXT NOT NULL DEFAULT 'contact',
 	search_term         TEXT NOT NULL DEFAULT '',
 	tags                TEXT NOT NULL DEFAULT '',
+	tags_mode           TEXT NOT NULL DEFAULT 'and',
 	created_at          TEXT NOT NULL DEFAULT (datetime('now')),
 	updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
 )`); err != nil {
+		return nil, err
+	}
+
+	if err := migrateLabelFilterTagsMode(db); err != nil {
 		return nil, err
 	}
 
@@ -386,6 +391,25 @@ func migrateContactPersonalEmail(db *sql.DB) error {
 	return err
 }
 
+// migrateLabelFilterTagsMode adds the tags_mode column to label_filters if
+// it's missing (databases from before the tri-state tag filter on
+// label_filter_form.html existed). Existing rows get the 'and' default,
+// same as the inline CREATE TABLE column default -- their plain
+// comma-separated Tags value (from before tri-state existed) is still valid
+// under the new "tag:state" format too, since the client-side parser treats
+// any tag without an explicit ":state" suffix as state 1 (include).
+func migrateLabelFilterTagsMode(db *sql.DB) error {
+	hasCol, err := columnExists(db, "label_filters", "tags_mode")
+	if err != nil {
+		return err
+	}
+	if hasCol {
+		return nil
+	}
+	_, err = db.Exec(`ALTER TABLE label_filters ADD COLUMN tags_mode TEXT NOT NULL DEFAULT 'and'`)
+	return err
+}
+
 // (listContacts, previously used to populate the "related contact" picker
 // on the now-removed relations feature, was removed as dead code alongside
 // it -- getContact/listContactsWithHousehold/listContactsForExport cover
@@ -397,7 +421,7 @@ func listContactsWithHousehold(db *sql.DB) ([]ContactListRow, error) {
 	rows, err := db.Query(`
 		SELECT c.id, c.household_id, c.first_name, c.last_name, c.gender, c.birthdate,
 		       c.mobile, c.email, c.tags, c.last_verified_on, c.created_at, c.updated_at,
-		       h.label, h.city
+		       h.label, h.city, h.address
 		FROM contacts c
 		JOIN households h ON h.id = c.household_id
 		ORDER BY c.last_name, c.first_name`)
@@ -411,7 +435,7 @@ func listContactsWithHousehold(db *sql.DB) ([]ContactListRow, error) {
 		var r ContactListRow
 		if err := rows.Scan(&r.ID, &r.HouseholdID, &r.FirstName, &r.LastName, &r.Gender,
 			&r.Birthdate, &r.Mobile, &r.Email, &r.Tags, &r.LastVerifiedOn, &r.CreatedAt, &r.UpdatedAt,
-			&r.HouseholdLabel, &r.City); err != nil {
+			&r.HouseholdLabel, &r.City, &r.Address); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -972,11 +996,11 @@ func countFiltersUsingContent(db *sql.DB, contentID int64) (int, error) {
 }
 
 const labelFilterColumns = `
-	id, name, sheet_id, content_id, print_mode, search_term, tags, created_at, updated_at`
+	id, name, sheet_id, content_id, print_mode, search_term, tags, tags_mode, created_at, updated_at`
 
 func scanLabelFilter(scan func(...any) error) (LabelFilter, error) {
 	var f LabelFilter
-	err := scan(&f.ID, &f.Name, &f.SheetID, &f.ContentID, &f.PrintMode, &f.SearchTerm, &f.Tags, &f.CreatedAt, &f.UpdatedAt)
+	err := scan(&f.ID, &f.Name, &f.SheetID, &f.ContentID, &f.PrintMode, &f.SearchTerm, &f.Tags, &f.TagsMode, &f.CreatedAt, &f.UpdatedAt)
 	return f, err
 }
 
@@ -1009,9 +1033,9 @@ func getLabelFilter(db *sql.DB, id int64) (*LabelFilter, error) {
 
 func createLabelFilter(db *sql.DB, f LabelFilter) (int64, error) {
 	res, err := db.Exec(`
-		INSERT INTO label_filters (name, sheet_id, content_id, print_mode, search_term, tags)
-		VALUES (?,?,?,?,?,?)`,
-		f.Name, f.SheetID, f.ContentID, f.PrintMode, f.SearchTerm, f.Tags)
+		INSERT INTO label_filters (name, sheet_id, content_id, print_mode, search_term, tags, tags_mode)
+		VALUES (?,?,?,?,?,?,?)`,
+		f.Name, f.SheetID, f.ContentID, f.PrintMode, f.SearchTerm, f.Tags, f.TagsMode)
 	if err != nil {
 		return 0, err
 	}
@@ -1021,9 +1045,9 @@ func createLabelFilter(db *sql.DB, f LabelFilter) (int64, error) {
 func updateLabelFilter(db *sql.DB, f LabelFilter) error {
 	_, err := db.Exec(`
 		UPDATE label_filters SET
-			name = ?, sheet_id = ?, content_id = ?, print_mode = ?, search_term = ?, tags = ?, updated_at = datetime('now')
+			name = ?, sheet_id = ?, content_id = ?, print_mode = ?, search_term = ?, tags = ?, tags_mode = ?, updated_at = datetime('now')
 		WHERE id = ?`,
-		f.Name, f.SheetID, f.ContentID, f.PrintMode, f.SearchTerm, f.Tags, f.ID)
+		f.Name, f.SheetID, f.ContentID, f.PrintMode, f.SearchTerm, f.Tags, f.TagsMode, f.ID)
 	return err
 }
 

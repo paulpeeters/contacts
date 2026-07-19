@@ -14,7 +14,12 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	data := indexData{Contacts: contacts}
+	tags, err := listDistinctContactTags(db)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	data := contactsListData{Contacts: contacts, AllTags: tags}
 	q := r.URL.Query()
 	if q.Has("contacts_created") || q.Has("contacts_updated") || q.Has("households_created") || q.Has("households_updated") {
 		data.ShowSyncSummary = true
@@ -23,7 +28,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		data.HouseholdsCreated, _ = strconv.Atoi(q.Get("households_created"))
 		data.HouseholdsUpdated, _ = strconv.Atoi(q.Get("households_updated"))
 	}
-	render(w, "index", data)
+	render(w, "contacts_list", data)
 }
 
 // handleNewForm renders the blank "add contact" form. If a household_id
@@ -96,7 +101,7 @@ func handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("Contact aangemaakt: %s %s (ID %d)", c.FirstName, c.LastName, id)
-	w.Header().Set("HX-Redirect", "/contacts")
+	w.Header().Set("HX-Redirect", contactsRedirectURL(id))
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -127,8 +132,17 @@ func handleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("Contact bijgewerkt: %s %s (ID %d)", c.FirstName, c.LastName, c.ID)
-	w.Header().Set("HX-Redirect", "/contacts")
+	w.Header().Set("HX-Redirect", contactsRedirectURL(c.ID))
 	w.WriteHeader(http.StatusOK)
+}
+
+// contactsRedirectURL builds the /contacts redirect target used after
+// create/update: scrollTo=<id> so the list auto-scrolls to the contact that
+// was just saved. The list's own filter isn't threaded through here -- it
+// lives in sessionStorage on the client (see contacts_list.html) and gets
+// re-applied on every load regardless of how /contacts was reached.
+func contactsRedirectURL(id int64) string {
+	return "/contacts?scrollTo=" + strconv.FormatInt(id, 10)
 }
 
 func handleDelete(w http.ResponseWriter, r *http.Request) {

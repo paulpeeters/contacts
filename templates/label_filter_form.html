@@ -9,7 +9,8 @@
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 <style>
   #contacts-table { display: block; overflow-x: auto; max-height: 60vh; overflow-y: auto; }
-  .tag-filter-list label { display: inline-block; margin-right: 0.75rem; white-space: nowrap; }
+  .tag-filter-list { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.5rem 0; }
+  .tag-tristate { width: auto; margin: 0; padding: 0.2rem 0.6rem; font-size: 0.85rem; }
 </style>
 </head>
 <body>
@@ -69,14 +70,18 @@
     </label>
 
     {{if .Tags}}
-    <p><strong>Filter op tag:</strong></p>
-    <div class="tag-filter-list">
+    <p style="margin-bottom:0.25rem;"><strong>Filter op tag</strong> <small>(klik: neutraal &rarr; bevat &rarr; bevat niet &rarr; neutraal)</small></p>
+    <div class="tag-filter-list" id="tag-filter-list">
       {{range .Tags}}
-      <label>
-        <input type="checkbox" name="tags[]" class="tag-filter" value="{{.}}" onchange="filterRows()"> {{.}}
-      </label>
+      <button type="button" class="tag-tristate outline secondary" data-tag="{{.}}" data-state="0">{{.}}</button>
       {{end}}
     </div>
+    <label style="display:flex; align-items:flex-start; gap:0.4rem;">
+      <input type="checkbox" id="tags-mode-toggle" style="flex-shrink:0; margin-top:0.3rem;">
+      <span>Tagvoorwaarden combineren met OF <small>(standaard: EN)</small></span>
+    </label>
+    <input type="hidden" name="tags_state" id="tags-state-input">
+    <input type="hidden" name="tags_mode" id="tags-mode-input" value="and">
     {{end}}
 
     <p style="display:flex; flex-wrap:wrap; align-items:center; gap:0.5rem;">
@@ -130,7 +135,8 @@
   </form>
 
   <script>
-    var FILTER_TAGS = "{{.Filter.Tags}}".split(',').map(function (t) { return t.trim(); }).filter(Boolean);
+    var SAVED_TAGS_RAW = "{{.Filter.Tags}}";
+    var SAVED_TAGS_MODE = "{{.Filter.TagsMode}}";
     var AUTO_SELECT = {{if .Filter.ID}}true{{else}}false{{end}};
 
     // Label sizes (mm) per sheet and the furthest-right/down element position
@@ -158,12 +164,51 @@
       }
     }
 
+    function tagButtons() { return document.querySelectorAll('.tag-tristate'); }
+
+    function setTagButtonVisual(btn) {
+      var state = btn.dataset.state;
+      btn.className = 'tag-tristate ' + (state === '1' ? '' : (state === '2' ? 'contrast' : 'outline secondary'));
+      var prefix = state === '1' ? '✓ ' : (state === '2' ? '✗ ' : '');
+      btn.textContent = prefix + btn.dataset.tag;
+    }
+
+    // Keeps tags_state/tags_mode (hidden fields, submitted along with the
+    // rest of the form -- see filters.go's labelFilterFromForm) in sync with
+    // the tri-state buttons, so "Filter bewaren" remembers this exact tag
+    // selection the same way it already remembers the search term.
+    function updateTagsHiddenFields() {
+      var stateInput = document.getElementById('tags-state-input');
+      var modeInput = document.getElementById('tags-mode-input');
+      var modeToggle = document.getElementById('tags-mode-toggle');
+      if (!stateInput) return;
+      var pairs = Array.prototype.filter.call(tagButtons(), function (b) { return b.dataset.state !== '0'; })
+        .map(function (b) { return b.dataset.tag + ':' + b.dataset.state; });
+      stateInput.value = pairs.join('|');
+      if (modeInput) modeInput.value = (modeToggle && modeToggle.checked) ? 'or' : 'and';
+    }
+
+    // Backward-compatible: understands both the new "tag:state|tag:state"
+    // format and the plain comma-separated tag list saved filters used
+    // before tri-state existed (each entry there implicitly means state 1 /
+    // include) -- see LabelFilter.Tags's doc comment in models.go.
+    function parseSavedTags(raw) {
+      if (!raw) return [];
+      var sep = raw.indexOf('|') !== -1 ? '|' : ',';
+      return raw.split(sep).map(function (s) { return s.trim(); }).filter(Boolean).map(function (s) {
+        var idx = s.lastIndexOf(':');
+        if (idx === -1) return { tag: s, state: '1' };
+        return { tag: s.slice(0, idx), state: s.slice(idx + 1) };
+      });
+    }
+
     function filterRows() {
       var q = (document.getElementById('search-input').value || '').toLowerCase();
-      var selectedTags = Array.prototype.map.call(
-        document.querySelectorAll('.tag-filter:checked'),
-        function (el) { return el.value; }
-      );
+      var tagStates = Array.prototype.map.call(tagButtons(), function (b) {
+        return { tag: b.dataset.tag, state: b.dataset.state };
+      }).filter(function (t) { return t.state !== '0'; });
+      var modeToggle = document.getElementById('tags-mode-toggle');
+      var tagMode = (modeToggle && modeToggle.checked) ? 'or' : 'and';
 
       document.querySelectorAll('#contacts-body tr').forEach(function (row) {
         if (row.dataset.search === undefined) return; // "no contacts" placeholder row
@@ -172,13 +217,19 @@
         var matchesSearch = q === '' || text.indexOf(q) !== -1;
 
         var matchesTags = true;
-        if (selectedTags.length > 0) {
+        if (tagStates.length > 0) {
           var rowTags = (row.dataset.tags || '').split(',').map(function (t) { return t.trim(); });
-          matchesTags = selectedTags.some(function (t) { return rowTags.indexOf(t) !== -1; });
+          var results = tagStates.map(function (t) {
+            var has = rowTags.indexOf(t.tag) !== -1;
+            return t.state === '1' ? has : !has;
+          });
+          matchesTags = tagMode === 'or' ? results.some(Boolean) : results.every(Boolean);
         }
 
         row.style.display = (matchesSearch && matchesTags) ? '' : 'none';
       });
+
+      updateTagsHiddenFields();
     }
 
     function selectVisible(checked) {
@@ -200,10 +251,25 @@
       var body = document.getElementById('contacts-body');
       if (body) body.addEventListener('change', updateCount);
 
-      FILTER_TAGS.forEach(function (tag) {
-        var cb = document.querySelector('.tag-filter[value="' + tag.replace(/"/g, '\\"') + '"]');
-        if (cb) cb.checked = true;
+      var savedTags = parseSavedTags(SAVED_TAGS_RAW);
+      var map = {};
+      savedTags.forEach(function (t) { map[t.tag] = t.state; });
+      tagButtons().forEach(function (btn) {
+        if (map[btn.dataset.tag] !== undefined) {
+          btn.dataset.state = map[btn.dataset.tag];
+        }
+        setTagButtonVisual(btn);
+        btn.addEventListener('click', function () {
+          btn.dataset.state = (parseInt(btn.dataset.state, 10) + 1) % 3;
+          setTagButtonVisual(btn);
+          filterRows();
+        });
       });
+      var modeToggle = document.getElementById('tags-mode-toggle');
+      if (modeToggle) {
+        modeToggle.checked = SAVED_TAGS_MODE === 'or';
+        modeToggle.addEventListener('change', filterRows);
+      }
 
       filterRows();
       if (AUTO_SELECT) selectVisible(true);

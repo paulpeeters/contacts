@@ -371,6 +371,18 @@ above) — not used by this production path.
     is deliberately only possible from the Huishoudens page — not from the
     contact form — to avoid silently overwriting another household's data
     if you switch the dropdown without reloading the page.
+- **Filteren op /contacts en /households**: a client-side filter panel
+  ("Filteren") on both list pages — first name/last name/e-mail/address/
+  city (substring, per field) plus a birth-year comparison (`<`, `=`, `>`)
+  and a tag filter (per tag: neutral / must-have / must-not-have, combined
+  with an EN/OF toggle). On /households, the personal-field conditions
+  (name/e-mail/birth year/tags) match if *any* member of that household
+  satisfies them; address/city match the household itself. The active
+  filter is kept in the browser's `sessionStorage` (cleared when the
+  browser/tab session ends), so it survives opening a contact/household and
+  coming back — via Opslaan, Annuleren, or the nav menu — no matter how you
+  got back to the list; "Filter wissen" resets it. The list also
+  auto-scrolls back to the row you just viewed or saved.
 - Data lives in `contacts.db`, a SQLite file created automatically the
   first time you run the app. Open it with DB Browser for SQLite any time.
 - **Upgrading an existing `contacts.db` from before households existed**:
@@ -668,7 +680,7 @@ filelog.go              contacts.log wegschrijven, rotatie bij opstart,
 msgbox_windows.go       Windows-foutvenster (MessageBoxW) bij opstartfouten
 msgbox_other.go         Fallback voor niet-Windows (console-log)
 models.go             Contact / Household / ContactListRow /
-                       formData / indexData / LabelSheet / LabelContent /
+                       formData / contactsListData / LabelSheet / LabelContent /
                        LabelFilter / LabelElement / LabelContact /
                        labelSheetFormData / labelContentFormData /
                        labelFilterFormData / labelFilterListData structs
@@ -680,7 +692,7 @@ templates/
   home.html           startpagina: korte uitleg per menu-onderdeel + database-
                       chooser-modal (auto-open eenmaal per opstart)
   logs.html           logs-pagina
-  index.html          contact list page (+ sync summary banner)
+  contacts_list.html  contact list page (+ filterpaneel + sync summary banner)
   contact_form.html    add/edit page + household picker
   household_list.html  overzicht huishoudens + leden
   household_form.html  add/edit huishouden (adres/telefoon/e-mail/aanhef)
@@ -692,8 +704,9 @@ templates/
   label_content_form.html elementenlijst + live CSS-preview (tegen een gekozen
                           blad) + proefdruk-sectie (kleine inline JS)
   label_filter_list.html  overzicht opgeslagen afdrukfilters
-  label_filter_form.html  filterinstellingen + contactselectie (zoeken/tag-filter
-                          + checkboxes) + twee print-knoppen + "Filter bewaren"
+  label_filter_form.html  filterinstellingen + contactselectie (zoeken + tri-state
+                          tag-filter, zelfde EN/OF-mechanisme als /contacts en
+                          /households) + twee print-knoppen + "Filter bewaren"
                           (client-side JS, geen server round-trip voor de selectie)
   settings.html         instellingen (eigen land)
 ```

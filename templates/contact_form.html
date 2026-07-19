@@ -106,7 +106,7 @@
 
     <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:1.5rem;">
       <button type="submit" style="width:auto;">Opslaan</button>
-      <button type="button" class="secondary outline" style="width:auto;" onclick="window.location.href='/contacts'">Annuleren</button>
+      <button type="button" class="secondary outline" style="width:auto;" onclick="cancelToContacts()">Annuleren</button>
     </div>
   </form>
 
@@ -135,6 +135,16 @@
   </dialog>
 
   <script>
+    // "Annuleren" bypasses the form submit entirely (no POST/PUT), so it
+    // can't go through contactsRedirectURL server-side. It doesn't need to
+    // carry the list's filter, though: contacts_list.html keeps that in
+    // sessionStorage and re-applies it on every load regardless of how you
+    // got there -- this only needs to add scrollTo for the row being left.
+    function cancelToContacts() {
+      var id = {{.Contact.ID}};
+      window.location.href = id ? '/contacts?scrollTo=' + id : '/contacts';
+    }
+
     function currentTagList() {
       var input = document.getElementById('tags-input');
       return input.value.split(',').map(function (t) { return t.trim(); }).filter(Boolean);
