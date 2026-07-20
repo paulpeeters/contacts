@@ -867,3 +867,10 @@ what such a script needs to do.
   please run `go mod tidy && go build -ldflags "-H=windowsgui -s -w" -o contacts.exe .`
   locally as the first check. Let me know if you hit any build errors and
   I'll fix them.
+
+## License
+
+Copyright © 2026 Paul Peeters.
+
+This project is licensed under the GNU Affero General Public License
+v3.0 only (`AGPL-3.0-only`). See [LICENSE](LICENSE) for details.
