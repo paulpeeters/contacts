@@ -10,6 +10,9 @@
 <style>
   .tag-filter-list { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.5rem 0; }
   .tag-tristate { width: auto; margin: 0; padding: 0.2rem 0.6rem; font-size: 0.85rem; }
+  .quick-search-wrap { position: relative; max-width: 32rem; margin-bottom: 1rem; }
+  .quick-search-wrap input { padding-right: 7rem; margin-bottom: 0; }
+  .quick-search-wrap button { position: absolute; right: 0.25rem; top: 50%; transform: translateY(-50%); width: auto; margin: 0; padding: 0.35rem 0.75rem; }
 </style>
 </head>
 <body>
@@ -27,58 +30,64 @@
 
   <p><a href="/households/new" role="button">+ Huishouden toevoegen</a></p>
 
-  <details id="filter-panel">
-    <summary role="button" class="secondary outline">Filteren</summary>
-    <p><small>Voornaam/naam/e-mail/geboortejaar/tags matchen als <strong>minstens één lid</strong> van het huishouden voldoet; adres en gemeente gelden voor het huishouden zelf.</small></p>
-    <div class="grid">
-      <label>Voornaam (lid) bevat <input type="text" id="f-fn"></label>
-      <label>Naam (lid) bevat <input type="text" id="f-ln"></label>
-      <label>E-mail (lid) bevat <input type="text" id="f-em"></label>
-    </div>
-    <div class="grid">
-      <label>Adres bevat <input type="text" id="f-ad"></label>
-      <label>Gemeente bevat <input type="text" id="f-ci"></label>
-      <label>Geboortejaar (lid)
-        <div style="display:flex; gap:0.5rem;">
-          <select id="f-yop" style="max-width:5rem;">
-            <option value="">-</option>
-            <option value="lt">&lt;</option>
-            <option value="eq">=</option>
-            <option value="gt">&gt;</option>
-          </select>
-          <input type="number" id="f-yv" placeholder="jjjj">
-        </div>
+  <div class="quick-search-wrap">
+    <input type="text" id="quick-search" placeholder="Zoeken op aanhef, voornaam, naam, adres, gemeente... (Enter)">
+    <button type="button" id="advanced-filter-btn" class="secondary outline">Filter</button>
+  </div>
+
+  <dialog id="advanced-filter-modal">
+    <article>
+      <h3>Uitgebreid filter</h3>
+      <p><small>Dit filter werkt enkel als het zoekvak hierboven leeg is &mdash; wis het zoekvak om dit filter weer te laten gelden. Voornaam/naam/e-mail/geboortejaar/tags matchen als <strong>minstens één lid</strong> van het huishouden voldoet; adres en gemeente gelden voor het huishouden zelf.</small></p>
+      <div class="grid">
+        <label>Voornaam (lid) bevat <input type="text" id="f-fn"></label>
+        <label>Naam (lid) bevat <input type="text" id="f-ln"></label>
+        <label>E-mail (lid) bevat <input type="text" id="f-em"></label>
+      </div>
+      <div class="grid">
+        <label>Adres bevat <input type="text" id="f-ad"></label>
+        <label>Gemeente bevat <input type="text" id="f-ci"></label>
+        <label>Geboortejaar (lid)
+          <div style="display:flex; gap:0.5rem;">
+            <select id="f-yop" style="max-width:5rem;">
+              <option value="">-</option>
+              <option value="lt">&lt;</option>
+              <option value="eq">=</option>
+              <option value="gt">&gt;</option>
+            </select>
+            <input type="number" id="f-yv" placeholder="jjjj">
+          </div>
+        </label>
+      </div>
+
+      {{if .AllTags}}
+      <p style="margin-bottom:0.25rem;"><strong>Tags (lid)</strong> <small>(klik: neutraal &rarr; bevat &rarr; bevat niet &rarr; neutraal)</small></p>
+      <div class="tag-filter-list" id="tag-filter-list">
+        {{range .AllTags}}
+        <button type="button" class="tag-tristate outline secondary" data-tag="{{.}}" data-state="0">{{.}}</button>
+        {{end}}
+      </div>
+      <label style="display:flex; align-items:flex-start; gap:0.4rem;">
+        <input type="checkbox" id="f-tagmode" style="flex-shrink:0; margin-top:0.3rem;">
+        <span>Tagvoorwaarden combineren met OF <small>(standaard: EN)</small></span>
       </label>
-    </div>
-
-    {{if .AllTags}}
-    <p style="margin-bottom:0.25rem;"><strong>Tags (lid)</strong> <small>(klik: neutraal &rarr; bevat &rarr; bevat niet &rarr; neutraal)</small></p>
-    <div class="tag-filter-list" id="tag-filter-list">
-      {{range .AllTags}}
-      <button type="button" class="tag-tristate outline secondary" data-tag="{{.}}" data-state="0">{{.}}</button>
       {{end}}
-    </div>
-    <label style="display:flex; align-items:flex-start; gap:0.4rem;">
-      <input type="checkbox" id="f-tagmode" style="flex-shrink:0; margin-top:0.3rem;">
-      <span>Tagvoorwaarden combineren met OF <small>(standaard: EN)</small></span>
-    </label>
-    {{end}}
 
-    <p>
-      <button type="button" class="secondary outline" id="f-reset" style="width:auto;">Filter wissen</button>
-    </p>
-  </details>
+      <footer style="display:flex; justify-content:space-between; gap:0.5rem; margin-top:1rem;">
+        <button type="button" class="secondary outline" id="f-reset" style="width:auto;">Filter wissen</button>
+        <button type="button" id="close-filter-modal" style="width:auto;">Sluiten</button>
+      </footer>
+    </article>
+  </dialog>
 
   <table>
     <thead>
-      <tr><th>Aanhef (label)</th><th>Adres</th><th>Stad</th><th>Leden</th><th></th></tr>
+      <tr><th>Aanhef (label)</th><th>Leden</th><th></th></tr>
     </thead>
     <tbody id="households-body">
       {{range .Households}}
-      <tr id="household-{{.ID}}" data-address="{{.Address}}" data-city="{{.City}}" data-members='{{.MembersJSON}}'>
+      <tr id="household-{{.ID}}" data-label="{{.Label}}" data-address="{{.Address}}" data-city="{{.City}}" data-members='{{.MembersJSON}}'>
         <td><a href="/households/{{.ID}}/edit">{{.Label}}</a></td>
-        <td>{{.Address}}</td>
-        <td>{{.City}}</td>
         <td>
           {{range $i, $m := .Members}}{{if $i}}, {{end}}<a href="/contacts/{{$m.ID}}/edit">{{$m.FirstName}} {{$m.LastName}}</a>{{else}}<em>geen leden</em>{{end}}
         </td>
@@ -91,7 +100,7 @@
         </td>
       </tr>
       {{else}}
-      <tr><td colspan="5">Nog geen huishoudens. <a href="/households/new">Maak er één aan</a>.</td></tr>
+      <tr><td colspan="3">Nog geen huishoudens. <a href="/households/new">Maak er één aan</a>.</td></tr>
       {{end}}
     </tbody>
   </table>
@@ -101,19 +110,28 @@
       var body = document.getElementById('households-body');
       if (!body) return;
 
-      // Filter state lives in sessionStorage rather than the URL -- see
-      // contacts_list.html's identical mechanism for the reasoning. Separate
-      // storage key from the contacts page, since this page has its own
-      // filter fields.
-      var STORAGE_KEY = 'householdsFilter';
+      var quickInput = document.getElementById('quick-search');
+      var advFilterBtn = document.getElementById('advanced-filter-btn');
+      var advModal = document.getElementById('advanced-filter-modal');
+      var closeModalBtn = document.getElementById('close-filter-modal');
 
-      function saveFilterState(f) {
-        try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(f)); } catch (e) { /* storage unavailable -- filter still works this page load */ }
+      // See contacts_list.html's identical mechanism for the reasoning --
+      // separate storage keys since this page has its own filter fields.
+      var QUICK_KEY = 'householdsQuickSearch';
+      var FILTER_KEY = 'householdsFilter';
+
+      function saveQuickSearch(v) {
+        try { sessionStorage.setItem(QUICK_KEY, v); } catch (e) { /* storage unavailable */ }
       }
-
+      function loadQuickSearch() {
+        try { return sessionStorage.getItem(QUICK_KEY) || ''; } catch (e) { return ''; }
+      }
+      function saveFilterState(f) {
+        try { sessionStorage.setItem(FILTER_KEY, JSON.stringify(f)); } catch (e) { /* storage unavailable */ }
+      }
       function loadFilterState() {
         try {
-          var raw = sessionStorage.getItem(STORAGE_KEY);
+          var raw = sessionStorage.getItem(FILTER_KEY);
           return raw ? JSON.parse(raw) : null;
         } catch (e) {
           return null;
@@ -129,16 +147,25 @@
         btn.textContent = prefix + btn.dataset.tag;
       }
 
+      // normalizeText/containsCI/hasSubstring: see contacts_list.html's
+      // identically-named helpers for the reasoning (accent-insensitive
+      // matching via NFD-normalization + stripping combining marks).
+      var COMBINING_MARKS_RE = new RegExp('[' + String.fromCharCode(768) + '-' + String.fromCharCode(879) + ']', 'g');
+      function normalizeText(s) {
+        return (s || '').toString().normalize('NFD').replace(COMBINING_MARKS_RE, '').toLowerCase();
+      }
+
       function containsCI(haystack, needle) {
-        return !needle || (haystack || '').toLowerCase().indexOf(needle.toLowerCase()) !== -1;
+        return !needle || normalizeText(haystack).indexOf(normalizeText(needle)) !== -1;
+      }
+
+      function hasSubstring(haystack, needle) {
+        return normalizeText(haystack).indexOf(normalizeText(needle)) !== -1;
       }
 
       // Does one household member (fn/ln/em/tags/yr) satisfy every active
       // text/year condition plus the tag EN/OF group? Mirrors
-      // contacts_list.html's identically-named helper -- kept as a separate
-      // copy here rather than shared, since this page has no member "row" of
-      // its own to attach it to (see applyFilter below, which calls this
-      // once per member via the data-members JSON).
+      // contacts_list.html's identically-named helper.
       function rowMatchesPersonal(f, fn, ln, em, tags, yr) {
         if (!containsCI(fn, f.fn)) return false;
         if (!containsCI(ln, f.ln)) return false;
@@ -183,26 +210,63 @@
         return !!(f.fn || f.ln || f.em || f.ad || f.ci || (f.yop && f.yv) || (f.tags && f.tags.length));
       }
 
+      // Hides the "Filter" button entirely as soon as the quick search box
+      // has anything typed in it (the advanced filter can't apply then
+      // anyway -- see applyFilter), and otherwise reflects the advanced
+      // filter's own state -- see contacts_list.html's identical helper.
+      function updateAdvancedFilterButton() {
+        var quick = quickInput.value.trim();
+        if (quick !== '') {
+          advFilterBtn.style.display = 'none';
+          return;
+        }
+        advFilterBtn.style.display = '';
+        var active = hasAnyFilter(currentFilterState());
+        advFilterBtn.textContent = active ? 'Filter (actief)' : 'Filter';
+        advFilterBtn.className = active ? 'outline' : 'secondary outline';
+      }
+
+      function quickMatchesMembers(row, quick) {
+        var members = [];
+        try { members = JSON.parse(row.dataset.members || '[]'); } catch (e) { members = []; }
+        return members.some(function (m) { return hasSubstring(m.fn, quick) || hasSubstring(m.ln, quick); });
+      }
+
       function applyFilter() {
-        var f = currentFilterState();
-        var personalActive = !!(f.fn || f.ln || f.em || (f.yop && f.yv) || f.tags.length);
+        var quick = (quickInput.value || '').trim();
         var shown = 0;
-        body.querySelectorAll('tr').forEach(function (row) {
-          if (row.dataset.address === undefined) return; // "geen huishoudens" placeholder row
-          if (!containsCI(row.dataset.address, f.ad)) { row.style.display = 'none'; return; }
-          if (!containsCI(row.dataset.city, f.ci)) { row.style.display = 'none'; return; }
-          var ok = true;
-          if (personalActive) {
-            var members = [];
-            try { members = JSON.parse(row.dataset.members || '[]'); } catch (e) { members = []; }
-            ok = members.some(function (m) { return rowMatchesPersonal(f, m.fn, m.ln, m.em, m.tags, m.yr); });
-          }
-          row.style.display = ok ? '' : 'none';
-          if (ok) shown++;
-        });
+
+        if (quick) {
+          body.querySelectorAll('tr').forEach(function (row) {
+            if (row.dataset.address === undefined) return; // "geen huishoudens" placeholder row
+            var ok = hasSubstring(row.dataset.label, quick) || hasSubstring(row.dataset.address, quick) || hasSubstring(row.dataset.city, quick) || quickMatchesMembers(row, quick);
+            row.style.display = ok ? '' : 'none';
+            if (ok) shown++;
+          });
+        } else {
+          var f = currentFilterState();
+          var personalActive = !!(f.fn || f.ln || f.em || (f.yop && f.yv) || f.tags.length);
+          body.querySelectorAll('tr').forEach(function (row) {
+            if (row.dataset.address === undefined) return;
+            if (!containsCI(row.dataset.address, f.ad)) { row.style.display = 'none'; return; }
+            if (!containsCI(row.dataset.city, f.ci)) { row.style.display = 'none'; return; }
+            var ok = true;
+            if (personalActive) {
+              var members = [];
+              try { members = JSON.parse(row.dataset.members || '[]'); } catch (e) { members = []; }
+              ok = members.some(function (m) { return rowMatchesPersonal(f, m.fn, m.ln, m.em, m.tags, m.yr); });
+            }
+            row.style.display = ok ? '' : 'none';
+            if (ok) shown++;
+          });
+          saveFilterState(f);
+        }
+
         var countEl = document.getElementById('f-shown-count');
         if (countEl) countEl.textContent = shown;
-        saveFilterState(f);
+
+        saveQuickSearch(quick);
+        updateAdvancedFilterButton();
       }
 
       function restoreFilterState() {
@@ -225,8 +289,6 @@
             setTagButtonVisual(btn);
           }
         });
-        var panel = document.getElementById('filter-panel');
-        if (panel && hasAnyFilter(saved)) panel.open = true;
       }
 
       // scrollTo is a one-time signal from the server (see
@@ -245,6 +307,20 @@
           window.history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''));
         }
       }
+
+      quickInput.addEventListener('keydown', function (evt) {
+        if (evt.key === 'Enter') {
+          evt.preventDefault();
+          applyFilter();
+        }
+      });
+      quickInput.addEventListener('input', function () {
+        updateAdvancedFilterButton();
+        if (quickInput.value.trim() === '') applyFilter();
+      });
+
+      advFilterBtn.addEventListener('click', function () { advModal.showModal(); });
+      if (closeModalBtn) closeModalBtn.addEventListener('click', function () { advModal.close(); });
 
       ['f-fn', 'f-ln', 'f-em', 'f-ad', 'f-ci', 'f-yv'].forEach(function (id) {
         var el = document.getElementById(id);
@@ -273,6 +349,7 @@
         });
       }
 
+      quickInput.value = loadQuickSearch();
       restoreFilterState();
       applyFilter();
       scrollToRowIfNeeded();

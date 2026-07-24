@@ -202,8 +202,17 @@
       });
     }
 
+    // normalizeText: accent-insensitive matching (NFD-normalize + strip
+    // combining marks), so e.g. searching "Saida" also matches "Saïda" --
+    // see contacts_list.html's identically-named helper for the same
+    // reasoning.
+    var COMBINING_MARKS_RE = new RegExp('[' + String.fromCharCode(768) + '-' + String.fromCharCode(879) + ']', 'g');
+    function normalizeText(s) {
+      return (s || '').toString().normalize('NFD').replace(COMBINING_MARKS_RE, '').toLowerCase();
+    }
+
     function filterRows() {
-      var q = (document.getElementById('search-input').value || '').toLowerCase();
+      var q = normalizeText(document.getElementById('search-input').value || '');
       var tagStates = Array.prototype.map.call(tagButtons(), function (b) {
         return { tag: b.dataset.tag, state: b.dataset.state };
       }).filter(function (t) { return t.state !== '0'; });
@@ -213,7 +222,7 @@
       document.querySelectorAll('#contacts-body tr').forEach(function (row) {
         if (row.dataset.search === undefined) return; // "no contacts" placeholder row
 
-        var text = row.dataset.search.toLowerCase();
+        var text = normalizeText(row.dataset.search);
         var matchesSearch = q === '' || text.indexOf(q) !== -1;
 
         var matchesTags = true;

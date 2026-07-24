@@ -10,6 +10,9 @@
 <style>
   .tag-filter-list { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.5rem 0; }
   .tag-tristate { width: auto; margin: 0; padding: 0.2rem 0.6rem; font-size: 0.85rem; }
+  .quick-search-wrap { position: relative; max-width: 32rem; margin-bottom: 1rem; }
+  .quick-search-wrap input { padding-right: 7rem; margin-bottom: 0; }
+  .quick-search-wrap button { position: absolute; right: 0.25rem; top: 50%; transform: translateY(-50%); width: auto; margin: 0; padding: 0.35rem 0.75rem; }
 </style>
 </head>
 <body>
@@ -36,72 +39,80 @@
     <a href="/label-filters" role="button" class="secondary outline">Etiketten afdrukken</a>
   </p>
 
-  <details id="filter-panel">
-    <summary role="button" class="secondary outline">Filteren</summary>
-    <div class="grid">
-      <label>Voornaam bevat <input type="text" id="f-fn"></label>
-      <label>Naam bevat <input type="text" id="f-ln"></label>
-      <label>E-mail bevat <input type="text" id="f-em"></label>
-    </div>
-    <div class="grid">
-      <label>Adres bevat <input type="text" id="f-ad"></label>
-      <label>Gemeente bevat <input type="text" id="f-ci"></label>
-      <label>Geboortejaar
-        <div style="display:flex; gap:0.5rem;">
-          <select id="f-yop" style="max-width:5rem;">
-            <option value="">-</option>
-            <option value="lt">&lt;</option>
-            <option value="eq">=</option>
-            <option value="gt">&gt;</option>
-          </select>
-          <input type="number" id="f-yv" placeholder="jjjj">
-        </div>
+  <div class="quick-search-wrap">
+    <input type="text" id="quick-search" placeholder="Zoeken op voornaam, naam, aanhef, adres, gemeente... (Enter)">
+    <button type="button" id="advanced-filter-btn" class="secondary outline">Filter</button>
+  </div>
+
+  <dialog id="advanced-filter-modal">
+    <article>
+      <h3>Uitgebreid filter</h3>
+      <p><small>Dit filter werkt enkel als het zoekvak hierboven leeg is &mdash; wis het zoekvak om dit filter weer te laten gelden.</small></p>
+      <div class="grid">
+        <label>Voornaam bevat <input type="text" id="f-fn"></label>
+        <label>Naam bevat <input type="text" id="f-ln"></label>
+        <label>E-mail bevat <input type="text" id="f-em"></label>
+      </div>
+      <div class="grid">
+        <label>Adres bevat <input type="text" id="f-ad"></label>
+        <label>Gemeente bevat <input type="text" id="f-ci"></label>
+        <label>Geboortejaar
+          <div style="display:flex; gap:0.5rem;">
+            <select id="f-yop" style="max-width:5rem;">
+              <option value="">-</option>
+              <option value="lt">&lt;</option>
+              <option value="eq">=</option>
+              <option value="gt">&gt;</option>
+            </select>
+            <input type="number" id="f-yv" placeholder="jjjj">
+          </div>
+        </label>
+      </div>
+
+      {{if .AllTags}}
+      <p style="margin-bottom:0.25rem;"><strong>Tags</strong> <small>(klik: neutraal &rarr; bevat &rarr; bevat niet &rarr; neutraal)</small></p>
+      <div class="tag-filter-list" id="tag-filter-list">
+        {{range .AllTags}}
+        <button type="button" class="tag-tristate outline secondary" data-tag="{{.}}" data-state="0">{{.}}</button>
+        {{end}}
+      </div>
+      <label style="display:flex; align-items:flex-start; gap:0.4rem;">
+        <input type="checkbox" id="f-tagmode" style="flex-shrink:0; margin-top:0.3rem;">
+        <span>Tagvoorwaarden combineren met OF <small>(standaard: EN)</small></span>
       </label>
-    </div>
-
-    {{if .AllTags}}
-    <p style="margin-bottom:0.25rem;"><strong>Tags</strong> <small>(klik: neutraal &rarr; bevat &rarr; bevat niet &rarr; neutraal)</small></p>
-    <div class="tag-filter-list" id="tag-filter-list">
-      {{range .AllTags}}
-      <button type="button" class="tag-tristate outline secondary" data-tag="{{.}}" data-state="0">{{.}}</button>
       {{end}}
-    </div>
-    <label style="display:flex; align-items:flex-start; gap:0.4rem;">
-      <input type="checkbox" id="f-tagmode" style="flex-shrink:0; margin-top:0.3rem;">
-      <span>Tagvoorwaarden combineren met OF <small>(standaard: EN)</small></span>
-    </label>
-    {{end}}
 
-    <p>
-      <button type="button" class="secondary outline" id="f-reset" style="width:auto;">Filter wissen</button>
-    </p>
-  </details>
+      <footer style="display:flex; justify-content:space-between; gap:0.5rem; margin-top:1rem;">
+        <button type="button" class="secondary outline" id="f-reset" style="width:auto;">Filter wissen</button>
+        <button type="button" id="close-filter-modal" style="width:auto;">Sluiten</button>
+      </footer>
+    </article>
+  </dialog>
 
   <table>
     <thead>
-      <tr><th>Naam</th><th>Huishouden</th><th>Stad</th><th>Mobiel</th><th>E-mail</th><th>Tags</th><th></th></tr>
+      <tr><th>Naam</th><th>Huishouden</th><th>Mobiel</th><th>E-mail</th><th></th></tr>
     </thead>
     <tbody id="contacts-body">
       {{range .Contacts}}
       <tr id="contact-{{.ID}}"
           data-firstname="{{.FirstName}}" data-lastname="{{.LastName}}" data-email="{{.Email}}"
+          data-label="{{.HouseholdLabel}}"
           data-address="{{.Address}}" data-city="{{.City}}" data-birthyear="{{.BirthYear}}" data-tags="{{.Tags}}">
         <td><a href="/contacts/{{.ID}}/edit">{{.FirstName}} {{.LastName}}</a></td>
         <td><a href="/households/{{.HouseholdID}}/edit">{{.HouseholdLabel}}</a></td>
-        <td>{{.City}}</td>
         <td>{{.Mobile}}</td>
         <td>{{.Email}}</td>
-        <td>{{.Tags}}</td>
         <td>
           <button class="secondary outline"
                   hx-delete="/contacts/{{.ID}}"
                   hx-target="#contact-{{.ID}}"
                   hx-swap="outerHTML"
-                  hx-confirm="{{.FirstName}} {{.LastName}} verwijderen?">Verwijderen</button>
+                  hx-confirm="{{.FirstName}} {{.LastName}} verwijderen?">Verwijder</button>
         </td>
       </tr>
       {{else}}
-      <tr><td colspan="7">Nog geen contacten. <a href="/contacts/new">Voeg je eerste contact toe</a>.</td></tr>
+      <tr><td colspan="5">Nog geen contacten. <a href="/contacts/new">Voeg je eerste contact toe</a>.</td></tr>
       {{end}}
     </tbody>
   </table>
@@ -111,22 +122,34 @@
       var body = document.getElementById('contacts-body');
       if (!body) return;
 
-      // Filter state lives in sessionStorage rather than the URL: it needs
-      // to survive every path back to this list (Opslaan, Annuleren,
-      // clicking "Contacten" in the nav, the browser back button, ...)
-      // without every one of those having to know about and forward a
-      // query string. sessionStorage is cleared when the browser/tab
-      // session ends, which is exactly the "active for this session only"
-      // behavior we want -- no expiry bookkeeping needed, unlike a cookie.
-      var STORAGE_KEY = 'contactsFilter';
+      var quickInput = document.getElementById('quick-search');
+      var advFilterBtn = document.getElementById('advanced-filter-btn');
+      var advModal = document.getElementById('advanced-filter-modal');
+      var closeModalBtn = document.getElementById('close-filter-modal');
 
-      function saveFilterState(f) {
-        try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(f)); } catch (e) { /* storage unavailable -- filter still works this page load */ }
+      // Two independent, mutually-exclusive pieces of persisted state
+      // (sessionStorage, so both survive Opslaan/Annuleren/nav-menu
+      // round-trips but clear when the browser/tab session ends):
+      //  - the quick-search text (QUICK_KEY)
+      //  - the advanced filter's field/tag values (FILTER_KEY)
+      // Whichever the quick-search box is non-empty, it alone decides which
+      // rows show -- the advanced filter's own conditions are ignored (but
+      // stay stored) until the box is cleared again.
+      var QUICK_KEY = 'contactsQuickSearch';
+      var FILTER_KEY = 'contactsFilter';
+
+      function saveQuickSearch(v) {
+        try { sessionStorage.setItem(QUICK_KEY, v); } catch (e) { /* storage unavailable */ }
       }
-
+      function loadQuickSearch() {
+        try { return sessionStorage.getItem(QUICK_KEY) || ''; } catch (e) { return ''; }
+      }
+      function saveFilterState(f) {
+        try { sessionStorage.setItem(FILTER_KEY, JSON.stringify(f)); } catch (e) { /* storage unavailable */ }
+      }
       function loadFilterState() {
         try {
-          var raw = sessionStorage.getItem(STORAGE_KEY);
+          var raw = sessionStorage.getItem(FILTER_KEY);
           return raw ? JSON.parse(raw) : null;
         } catch (e) {
           return null;
@@ -142,13 +165,30 @@
         btn.textContent = prefix + btn.dataset.tag;
       }
 
-      function containsCI(haystack, needle) {
-        return !needle || (haystack || '').toLowerCase().indexOf(needle.toLowerCase()) !== -1;
+      // normalizeText: lowercases and strips diacritics (NFD-decomposes
+      // accented characters into a base letter + combining marks, then
+      // drops those combining-mark codepoints), so e.g. searching "Saida"
+      // also matches "Saïda". Used by every text match below instead of a
+      // plain toLowerCase(). The combining-marks range (U+0300-U+036F) is
+      // built from character codes rather than a \u escape in a regex
+      // literal, purely so it stays readable as plain ASCII in this file.
+      var COMBINING_MARKS_RE = new RegExp('[' + String.fromCharCode(768) + '-' + String.fromCharCode(879) + ']', 'g');
+      function normalizeText(s) {
+        return (s || '').toString().normalize('NFD').replace(COMBINING_MARKS_RE, '').toLowerCase();
       }
 
-      // Shared by household_list.html's per-member matching: given the
-      // current filter state f and one "person" worth of fields, does it
-      // satisfy every active text/year condition plus the tag EN/OF group?
+      // containsCI: used by the advanced filter's per-field AND matching --
+      // an empty needle means "no constraint on this field", so it passes.
+      function containsCI(haystack, needle) {
+        return !needle || normalizeText(haystack).indexOf(normalizeText(needle)) !== -1;
+      }
+
+      // hasSubstring: used by the quick search's OR-across-fields matching --
+      // needle is always non-empty there, so no "empty passes" shortcut.
+      function hasSubstring(haystack, needle) {
+        return normalizeText(haystack).indexOf(normalizeText(needle)) !== -1;
+      }
+
       function rowMatchesPersonal(f, fn, ln, em, tags, yr) {
         if (!containsCI(fn, f.fn)) return false;
         if (!containsCI(ln, f.ln)) return false;
@@ -193,20 +233,56 @@
         return !!(f.fn || f.ln || f.em || f.ad || f.ci || (f.yop && f.yv) || (f.tags && f.tags.length));
       }
 
+      // Hides the "Filter" button entirely as soon as the quick search box
+      // has anything typed in it (the advanced filter can't apply then
+      // anyway -- see applyFilter), and otherwise reflects the advanced
+      // filter's own state: plain "Filter" when nothing is set, or
+      // "Filter (actief)" when it has conditions -- this is the visible
+      // half of "how do I get my advanced filter back": clear the search
+      // box and the button reappears already showing "actief" if it applies.
+      function updateAdvancedFilterButton() {
+        var quick = quickInput.value.trim();
+        if (quick !== '') {
+          advFilterBtn.style.display = 'none';
+          return;
+        }
+        advFilterBtn.style.display = '';
+        var active = hasAnyFilter(currentFilterState());
+        advFilterBtn.textContent = active ? 'Filter (actief)' : 'Filter';
+        advFilterBtn.className = active ? 'outline' : 'secondary outline';
+      }
+
       function applyFilter() {
-        var f = currentFilterState();
+        var quick = (quickInput.value || '').trim();
         var shown = 0;
-        body.querySelectorAll('tr').forEach(function (row) {
-          if (row.dataset.firstname === undefined) return; // "geen contacten" placeholder row
-          if (!containsCI(row.dataset.address, f.ad)) { row.style.display = 'none'; return; }
-          if (!containsCI(row.dataset.city, f.ci)) { row.style.display = 'none'; return; }
-          var ok = rowMatchesPersonal(f, row.dataset.firstname, row.dataset.lastname, row.dataset.email, row.dataset.tags, row.dataset.birthyear);
-          row.style.display = ok ? '' : 'none';
-          if (ok) shown++;
-        });
+
+        if (quick) {
+          body.querySelectorAll('tr').forEach(function (row) {
+            if (row.dataset.firstname === undefined) return; // "geen contacten" placeholder row
+            var ok = hasSubstring(row.dataset.firstname, quick) || hasSubstring(row.dataset.lastname, quick) ||
+              hasSubstring(row.dataset.label, quick) ||
+              hasSubstring(row.dataset.address, quick) || hasSubstring(row.dataset.city, quick);
+            row.style.display = ok ? '' : 'none';
+            if (ok) shown++;
+          });
+        } else {
+          var f = currentFilterState();
+          body.querySelectorAll('tr').forEach(function (row) {
+            if (row.dataset.firstname === undefined) return;
+            if (!containsCI(row.dataset.address, f.ad)) { row.style.display = 'none'; return; }
+            if (!containsCI(row.dataset.city, f.ci)) { row.style.display = 'none'; return; }
+            var ok = rowMatchesPersonal(f, row.dataset.firstname, row.dataset.lastname, row.dataset.email, row.dataset.tags, row.dataset.birthyear);
+            row.style.display = ok ? '' : 'none';
+            if (ok) shown++;
+          });
+          saveFilterState(f);
+        }
+
         var countEl = document.getElementById('f-shown-count');
         if (countEl) countEl.textContent = shown;
-        saveFilterState(f);
+
+        saveQuickSearch(quick);
+        updateAdvancedFilterButton();
       }
 
       function restoreFilterState() {
@@ -229,13 +305,11 @@
             setTagButtonVisual(btn);
           }
         });
-        var panel = document.getElementById('filter-panel');
-        if (panel && hasAnyFilter(saved)) panel.open = true;
       }
 
       // scrollTo is a one-time signal from the server (see contactsRedirectURL
       // in handlers.go), not persistent filter state, so it stays a URL param
-      // -- it's stripped right after use so a page refresh doesn't re-scroll.
+      // -- stripped right after use so a page refresh doesn't re-scroll.
       function scrollToRowIfNeeded() {
         var params = new URLSearchParams(window.location.search);
         var id = params.get('scrollTo');
@@ -249,6 +323,27 @@
           window.history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''));
         }
       }
+
+      quickInput.addEventListener('keydown', function (evt) {
+        if (evt.key === 'Enter') {
+          evt.preventDefault();
+          applyFilter();
+        }
+      });
+      quickInput.addEventListener('input', function () {
+        // Hides/shows the Filter button on every keystroke (not gated
+        // behind Enter, unlike the actual search) -- see
+        // updateAdvancedFilterButton.
+        updateAdvancedFilterButton();
+        // Clearing the box takes effect immediately (no Enter needed) --
+        // otherwise the list would stay stuck showing the last quick-search
+        // result with no obvious way back to the advanced filter besides
+        // re-pressing Enter on an already-empty box.
+        if (quickInput.value.trim() === '') applyFilter();
+      });
+
+      advFilterBtn.addEventListener('click', function () { advModal.showModal(); });
+      if (closeModalBtn) closeModalBtn.addEventListener('click', function () { advModal.close(); });
 
       ['f-fn', 'f-ln', 'f-em', 'f-ad', 'f-ci', 'f-yv'].forEach(function (id) {
         var el = document.getElementById(id);
@@ -277,6 +372,7 @@
         });
       }
 
+      quickInput.value = loadQuickSearch();
       restoreFilterState();
       applyFilter();
       scrollToRowIfNeeded();

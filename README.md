@@ -371,18 +371,30 @@ above) — not used by this production path.
     is deliberately only possible from the Huishoudens page — not from the
     contact form — to avoid silently overwriting another household's data
     if you switch the dropdown without reloading the page.
-- **Filteren op /contacts en /households**: a client-side filter panel
-  ("Filteren") on both list pages — first name/last name/e-mail/address/
-  city (substring, per field) plus a birth-year comparison (`<`, `=`, `>`)
-  and a tag filter (per tag: neutral / must-have / must-not-have, combined
-  with an EN/OF toggle). On /households, the personal-field conditions
-  (name/e-mail/birth year/tags) match if *any* member of that household
-  satisfies them; address/city match the household itself. The active
-  filter is kept in the browser's `sessionStorage` (cleared when the
-  browser/tab session ends), so it survives opening a contact/household and
-  coming back — via Opslaan, Annuleren, or the nav menu — no matter how you
-  got back to the list; "Filter wissen" resets it. The list also
-  auto-scrolls back to the row you just viewed or saved.
+- **Filteren op /contacts en /households**: both list pages have a quick
+  search box (on /contacts: first name/last name/household label
+  ("Aanhef")/address/city; on /households: its own label/address/city plus
+  any member's first/last name — all OR-combined, matches if the typed text
+  appears in *any* of those) that searches on Enter, plus a "Filter" button
+  at its right edge opening a modal with the full advanced filter (e-mail,
+  birth-year comparison `<`/`=`/`>`, and a tag filter per tag: neutral /
+  must-have / must-not-have, combined with an EN/OF toggle). On /households,
+  the advanced filter's personal-field conditions (name/e-mail/birth
+  year/tags) match if *any* member of that household satisfies them;
+  address/city match the household itself. All three text searches (the
+  quick search box here, the advanced filter's text fields, and the search
+  box on the label-printing screen) are accent-insensitive — searching
+  "Saida" also matches "Saïda" — via Unicode NFD-normalization client-side.
+  The advanced filter only takes effect while the quick search box is
+  empty — clearing it re-activates whatever advanced filter was last set,
+  which is also why the "Filter" button's label switches between "Filter",
+  "Filter (actief)" and "Filter (inactief)". Both the quick search text and
+  the advanced filter are kept in the browser's `sessionStorage` (cleared
+  when the browser/tab session ends), so either survives opening a
+  contact/household and coming back — via Opslaan, Annuleren, or the nav
+  menu — no matter how you got back to the list; "Filter wissen" (inside the
+  modal) resets the advanced filter. The list also auto-scrolls back to the
+  row you just viewed or saved.
 - Data lives in `contacts.db`, a SQLite file created automatically the
   first time you run the app. Open it with DB Browser for SQLite any time.
 - **Upgrading an existing `contacts.db` from before households existed**:
